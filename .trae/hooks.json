@@ -1,6 +1,17 @@
 {
   "version": 1,
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "& \"E:\\Tool\\Node.js\\node.exe\" \"$env:TRAE_PROJECT_DIR\\server\\hooks\\session-start.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [

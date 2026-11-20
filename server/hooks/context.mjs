@@ -7,7 +7,7 @@
  * 原则：永不阻断对话。任何异常都静默退出 0，只写本地日志。
  */
 
-import { appendFileSync, mkdirSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -47,6 +47,11 @@ try {
 
 const prompt = String(input.prompt ?? '')
 const cwd = input.cwd ?? process.env.TRAE_PROJECT_DIR ?? repoRoot
+
+// 全局 Hook 与项目 Hook 会同时触发：项目自带 hooks.json 时让全局那次直接退出，避免重复注入
+if (process.env.AGENTMEMORY_HOOK_SCOPE === 'global' && existsSync(join(cwd, '.trae', 'hooks.json'))) {
+  process.exit(0)
+}
 
 if (prompt.trim().length === 0) process.exit(0)
 
