@@ -11,7 +11,7 @@
 一个**跨会话长期记忆系统**，毕设形态是「引擎 + 两个宿主适配器 + 一个可演示的界面」：
 
 ```
-浏览器演示页 / DSH 插件面板 / 任意 MCP 客户端
+浏览器记忆面板 / DSH 插件面板 / 任意 MCP 客户端
                  │
         engine.js（零宿主依赖）
                  │
@@ -62,11 +62,12 @@ AgentMemory/
 │   ├── http.js       229 行 演示服务：静态页 + JSON API + POST /mcp
 │   ├── tools.js      164 行 MCP 工具定义与 JSON-RPC 分发（stdio 与 HTTP 共用）
 │   ├── mcp.js         39 行 stdio 入口
+│   ├── hooks/                Trae Hook：context.mjs（每轮注入）、session-start.mjs（会话规则）
 │   ├── package.json           零依赖；scripts: start / mcp
 │   ├── demo.db               演示库（首次启动自动 seed 8 条）
-│   └── test/engine.test.js    6 个用例；mcp-sdk.mjs 需另装官方 SDK
+│   └── test/                  engine.test.js（6）+ tools.test.js（4，密钥拦截）
 │
-├── demo/index.html   ~450 行 单文件演示页（零外部依赖、零构建）
+├── demo/index.html   ~500 行 单文件记忆面板（只读优先，零外部依赖、零构建）
 │
 ├── eval/                     ← 评测（论文实验章）
 │   ├── cases.js       66 行 40 条中文用例（A 组更新 20 / B 组跨会话 20）
@@ -155,7 +156,7 @@ engine.store                            // 逃生口：需要 store 细节时直
 
 ### 5.2 演示服务 HTTP（`server/http.js`，只绑 127.0.0.1:7788）
 
-`GET /`（演示页）、`/api/health`、`/api/state`、`/api/inject?q=`、`/api/chain?topic=&scope=`、`/api/history?id=`、`/api/export`；`POST /api/say`（发一句话 → 抽取 + 入库 + 返回三段注入）、`/api/save`、`/api/reset`、`/mcp`。
+`GET /`（记忆面板）、`/api/health`、`/api/state`、`/api/list?status=&scope=`、`/api/get?id=`、`/api/inject?q=`、`/api/chain?topic=&scope=`、`/api/history?id=`、`/api/export`；`POST /api/save`、`/api/update`、`/api/forget`、`/api/restore`、`/api/say`（规则抽取，演示用）、`/api/reset`（仅 `demo.db`，真实库返回 403）、`/mcp`。
 
 ### 5.3 插件 HTTP（`plugin/index.js`，全部以 `/api/agentmemory/` 开头）
 
@@ -200,6 +201,38 @@ engine.store                            // 逃生口：需要 store 细节时直
 - **检索去重**（`plugin/lib/retrieval.js:36-38`）：`coreIds.has(row.id)` 跳过 + `similarity(coreText, content) >= 0.85` 跳过。**不是**消息 digest，也不查 `turn_trace`；`turn_trace` 只用于回合栏展示。
 - **抽取失败**：`flush()` 先把缓冲置空再调模型；模型报错/超时的 `.catch` 会把这段文字拼回缓冲、`syncPending()` 并写 `captureStats.reason = '抽取失败，内容已放回缓冲'`，下一轮再抽（没有独立重试队列）。密钥命中则是**整条拒绝**（`looksSecret`，抽取循环 `continue` / `POST /save` 返回 400），不做脱敏。
 
+### 5.7 Trae 接入配置（MCP + Hook，2026-11-20 实测）
+
+三处配置都在仓库外，不受版本管理；换机要照下面手工重建。
+
+**1）MCP：`%APPDATA%\Trae CN\User\mcp.json`**（`TRAE SOLO CN` 下还有一份同样的）
+
+```json
+"AgentMemory": {
+  "command": "E:\\Tool\\Node.js\\node.exe",
+  "args": ["<repo>\\server\\mcp.js"],
+  "env": { "AGENTMEMORY_DB": "<home>\\.dsh\\agentmemory\\memory.db" }
+}
+```
+
+**不要写 `AGENTMEMORY_CWD`**：写死会让其他工作区的项目归属出错。MCP 默认取进程 cwd（即工作区根），工具也支持每次传 `cwd`。
+
+**2）全局 Hook：`%USERPROFILE%\.trae-cn\hooks.json`**（对本机所有工作区生效）
+
+- `SessionStart` → `server/hooks/session-start.mjs`：会话建立时下发 5 条记忆约定。
+- `UserPromptSubmit` → `server/hooks/context.mjs`：注入三段记忆 + 「用工具查」提示。
+- 两条命令都带前缀 `$env:AGENTMEMORY_HOOK_SCOPE='global';`。脚本据此判断：若当前工作区自带 `.trae/hooks.json`，全局这份直接退出，避免重复注入。
+- 命令里的仓库路径是写死的，仓库搬家要同步改。
+
+**3）用户规则：`%USERPROFILE%\.trae-cn\user_rules\rule-*.md`**（设置 → 规则 的输入框）
+
+- 文件末尾 4 条「长期记忆约定」，标题声明「所有工作区生效；项目记忆按当前工作区自动隔离」。
+- 这是目前唯一被证实能进入模型上下文的规则通道（SessionStart 在部分版本未生效），删改前先验证 Hook。
+
+仓库内另有项目级 `.trae/hooks.json`（同样两个事件）。global 与 project 同时存在时的去重逻辑见上。
+
+生效方式：改 `mcp.json` / hooks 需重启 Trae；`SessionStart` 只在新建会话时触发；`UserPromptSubmit` 每次提问都执行（约 30–50ms）。
+
 ---
 
 ## 6. 已完成（含验证方式）
@@ -218,7 +251,7 @@ engine.store                            // 逃生口：需要 store 细节时直
 | 生命周期：过期、陈旧复核、使用计数 | ✅ | `lifecycle.test.js` 7 例 |
 | Markdown 导出 | ✅ | `export.test.js` 3 例 + 面板按钮 |
 | 独立引擎 `engine.js` | ✅ | `server/test/engine.test.js` 6 例 |
-| 演示页（会话 A/B、三段注入、版本链、一键重置） | ✅ | 人工跑通；演示脚本在 README |
+| 记忆面板（列表/详情/编辑/软删/恢复/版本链/注入预览） | ✅ | 浏览器实测：8 条种子、展开显示旧值、控制台无报错 |
 | MCP stdio + Streamable HTTP | ✅ 协议层 | 官方 SDK 客户端两种传输都跑通（initialize / tools/list / save / context / isError） |
 | 评测脚本 | ✅ v1 | 40 条用例，A 组 100%、B 组 85%（见 `eval/report.md`） |
 
@@ -236,12 +269,12 @@ cd ..; node eval/run.js
 
 ## 7. 未完成 / 已知限制（按重要性）
 
-1. **MCP 没有在真实客户端里连过**。本机没装 Claude Code / Cursor / Codex，配置是按官方格式写的、协议层验证过。装上任一个客户端后应第一时间实测（`docs/mcp-clients.md` 有自验命令）。
+1. **MCP 只在 Trae CN 里实连过**（8 个工具、读写共享库、`initialize.instructions`、密钥写入被拒）。Claude Code / Cursor / Codex 仍未实测，配置按官方格式写在 `docs/mcp-clients.md`。
 2. **检索是纯词法**。同义改写会漏：评测里 3 条漏检是「数据量 vs 万条行情快照」这类无语汇重叠的问题。85% 是这套方案的诚实上限；论文里要写清楚，向量检索列为 future work。
 3. **评测规模小**（40 条、自建语料）。够证明机制，不够宣称通用性能。下一步可以扩到 100+ 条，并加一组「长对话（50 轮后仍能召回早期事实）」。
 4. **自动抽取依赖模型**，抽取提示词的召回/精度没有量化。抽取失败会在面板状态行显示原因，但没有重试队列。
 5. **SSE 传输没实现**（MCP 里 Streamable HTTP 已够用；老客户端可能要 SSE）。
-6. **并发写未验证**：插件与 MCP 共用一个库时没有锁策略（SQLite 默认 busy timeout）。事实：`plugin/lib/store.js:16-19` 设 `journal_mode=WAL`、`synchronous=NORMAL`、`busy_timeout=5000`、`foreign_keys=ON`；每个进程持有一份长连接（插件在 `apply` 内 `getStore()` 单例，MCP 进程启动即 open，直到进程退出）。跨进程写入、以及 WAL checkpoint 由谁触发，都还没压测过。
+6. **并发写已压测两进程，仍未测多进程与长事务**：`eval/concurrency.mjs` 用 2 进程各写 500 / 2000 条，零 `SQLITE_BUSY`、落库数与槽位数一致（490ms / 2369ms）。配置是 `journal_mode=WAL`、`synchronous=NORMAL`、`busy_timeout=5000`、`foreign_keys=ON`（`plugin/lib/store.js:16-19`），每进程一份长连接。3 个以上进程、单事务超过 5 秒、以及 WAL checkpoint 由谁触发，仍未验证。
 
 **这项怎么验证**（三项未验证项的测法，不要只写「未验证」）：
 
@@ -253,7 +286,7 @@ cd ..; node eval/run.js
 
 7. **子代理不注入**（`origin:'subagent'` 直接跳过），是有意为之，但没做过对照实验。
 8. `.tmp/` 里有早期探针脚本（schema/fts/merge 实验），可删，删前看一眼有没有想留的数据。
-9. 仓库没 git。**建议接手第一件事就 `git init` 并提交当前状态**，否则改坏了没法回退。
+9. 仓库已初始化并推送到 `github.com/6alex776/AgentMemory`（`main`）。开源前仍需脱敏：HANDOFF、`docs/mcp-clients.md` 里还有本机绝对路径。
 
 ---
 
