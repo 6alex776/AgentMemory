@@ -6,6 +6,8 @@
  * really tested. So the definitions and the dispatch live here.
  */
 
+import { looksSecret } from '../plugin/lib/capture.js'
+
 export const TOOLS = [
   {
     name: 'memory_context',
@@ -107,6 +109,8 @@ const text = (value) => ({
   content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }],
 })
 
+const SECRET_REJECTED = '检测到疑似密钥/凭据，拒绝写入记忆。若确需记录，请改为描述用途而不是保存原值。'
+
 /**
  * @param {ReturnType<typeof import('./engine.js').openEngine>} engine
  * @param {string} name
@@ -126,6 +130,9 @@ export function callTool(engine, name, args = {}, defaultCwd = process.cwd()) {
     case 'memory_save': {
       if (typeof args.content !== 'string' || args.content.trim().length < 4) {
         return { isError: true, ...text('内容太短，至少 4 个字') }
+      }
+      if (looksSecret(args.content)) {
+        return { isError: true, ...text(SECRET_REJECTED) }
       }
       const { result } = engine.save({
         content: args.content.trim(),
@@ -162,6 +169,9 @@ export function callTool(engine, name, args = {}, defaultCwd = process.cwd()) {
       if (row === undefined) return { isError: true, ...text('没有这条记忆') }
       const patch = {}
       if (typeof args.content === 'string' && args.content.trim().length >= 4) patch.content = args.content.trim()
+      if (patch.content !== undefined && looksSecret(patch.content)) {
+        return { isError: true, ...text(SECRET_REJECTED) }
+      }
       if (typeof args.kind === 'string') patch.kind = args.kind
       if (Number.isFinite(args.importance)) patch.importance = Math.min(5, Math.max(1, Number(args.importance)))
       if (Object.keys(patch).length === 0) return { isError: true, ...text('没有要改的字段') }
