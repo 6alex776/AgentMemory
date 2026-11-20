@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "& \"E:\\Tool\\Node.js\\node.exe\" \"$env:TRAE_PROJECT_DIR\\server\\hooks\\context.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

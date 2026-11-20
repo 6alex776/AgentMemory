@@ -51,7 +51,8 @@ build/
 *~
 
 # 工具与进程缓存
-.trae/
+.trae/*
+!.trae/hooks.json
 .cache/
 *.tsbuildinfo
 *.pid

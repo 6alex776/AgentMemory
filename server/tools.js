@@ -178,6 +178,20 @@ export const SERVER_INFO = { name: 'agentmemory', version: '0.1.0' }
 export const PROTOCOL_VERSION = '2025-06-18'
 
 /**
+ * 握手时下发给客户端的使用说明。写在这里而不是只写进记忆条目，
+ * 是因为新接入的 agent 在第一次调用工具前看不到任何记忆。
+ */
+export const INSTRUCTIONS = [
+  '这是跨会话长期记忆系统（本地 SQLite + FTS5）。',
+  '读取：优先调用 memory_context，传 question 与 cwd，返回身份块、项目块、检索块；',
+  '若宿主（如 Trae 的 UserPromptSubmit Hook）已自动注入「长期记忆」段落，不要再重复调用。',
+  '写入：仅在判断信息值得长期保留时调用 memory_save（用户背景、偏好、决策、项目事实、经验教训）；',
+  '同一 topicKey 会替换旧值并保留版本链；密钥、口令、token 一律不写入。',
+  '自动抽取：只在 DSH 插件宿主内存在（回合结束、缓冲≥300 字符）。',
+  'MCP 层没有后台抽取，不调用 memory_save 就不会有任何内容被记录。',
+].join('\n')
+
+/**
  * One JSON-RPC message in, one JSON-RPC message out (or null for notifications).
  * Both transports share this so a client sees identical behaviour.
  */
@@ -191,6 +205,7 @@ export function handleMessage(engine, message, defaultCwd) {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: { listChanged: false } },
         serverInfo: SERVER_INFO,
+        instructions: INSTRUCTIONS,
       },
     }
   }
