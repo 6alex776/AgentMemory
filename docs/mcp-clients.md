@@ -26,11 +26,11 @@ E:\Tool\nvm\v20.9.0\node.exe    ← v20.9.0，不行
 
 **2. 数据库放在哪**
 
-- 默认：`C:\Users\29390\.agentmemory\memory.db`（MCP 与 DSH 插件各用各的库）
+- 默认：`~/.agentmemory/memory.db`（MCP 与 DSH 插件各用各的库）
 - 覆盖：环境变量 `AGENTMEMORY_DB`
-- 项目归属：默认用客户端启动服务时的 `cwd`；要固定就设 `AGENTMEMORY_CWD`
+- 项目归属：默认取服务进程的 `cwd`（即客户端所在工作区）。**不建议设 `AGENTMEMORY_CWD`**——写死会让其他工作区的记忆归错项目；确实要固定时，在单次工具调用里传 `cwd`。
 
-想让「DSH 插件」和「MCP」读同一个库，把 `AGENTMEMORY_DB` 指到 `C:\Users\29390\.dsh\agentmemory\memory.db` 即可。同库双写没做并发验证，演示可以，长期别两个宿主同时高频写。
+想让「DSH 插件」和「MCP」读同一个库，把 `AGENTMEMORY_DB` 指到 `$DSH_HOME\agentmemory\memory.db` 即可。两进程突发写入已压测（2×2000 条零 `SQLITE_BUSY`），但长期高频双写仍不建议。
 
 ---
 
@@ -87,7 +87,31 @@ HTTP 版把上面整块换成：
 { "mcpServers": { "agentmemory": { "url": "http://127.0.0.1:7788/mcp" } } }
 ```
 
-`Settings → MCP` 里应该出现 6 个工具，绿灯。
+`Settings → MCP` 里应该出现 8 个工具，绿灯。
+
+---
+
+## Trae CN（已实测）
+
+配置在 `%APPDATA%\Trae CN\User\mcp.json`（`TRAE SOLO CN` 另有一份）：
+
+```json
+{
+  "mcpServers": {
+    "AgentMemory": {
+      "command": "E:\\Tool\\Node.js\\node.exe",
+      "args": ["C:\\Users\\29390\\OneDrive\\Desktop\\AgentMemory\\server\\mcp.js"],
+      "env": { "AGENTMEMORY_DB": "C:\\Users\\29390\\.dsh\\agentmemory\\memory.db" }
+    }
+  }
+}
+```
+
+注意：
+
+- 改完必须**完全退出 Trae 再启动**，MCP 进程才会换新代码；面板不存在「重连」按钮。
+- 面板的服务器列表可能不显示手写条目，不影响工具可用（看对话里是否出现 `memory_*` 调用）。
+- 想让它自动注入记忆，另配 Hook：项目级 `.trae/hooks.json` 或全局 `%USERPROFILE%\.trae-cn\hooks.json`，见仓库 [HANDOFF.md](../HANDOFF.md) 5.7。
 
 ---
 
@@ -180,7 +204,7 @@ mcpServers:
 
 ## 接入后的用法
 
-6 个工具，模型自己会挑；你只需要在提示里点名：
+8 个工具，模型自己会挑；你只需要在提示里点名：
 
 | 你说的话 | 应当触发的工具 |
 |---|---|
@@ -200,7 +224,8 @@ mcpServers:
 |---|---|
 | HTTP `POST /mcp`：`initialize` / `tools/list` / 4 个工具调用 / `isError` 透传 | ✅ 官方 SDK `Client` + `StreamableHTTPClientTransport` 实测 |
 | stdio：`initialize` / `tools/list` / `memory_save` / `memory_context` | ✅ 官方 SDK `Client` + `StdioClientTransport` 实测（子进程由 SDK 拉起，DB 用临时文件） |
-| 手工管道（`node server/mcp.js < in.jsonl`） | ✅ 6 个工具全过，见提交历史里的探针 |
+| 手工管道（`node server/mcp.js < in.jsonl`） | ✅ 8 个工具全过，见提交历史里的探针 |
+| Trae CN 真机连接 | ✅ 8 个工具、读写共享库、`initialize.instructions`、密钥写入被拒 |
 | Claude Code / Cursor / Codex 真机连接 | ⬜ 本机没装这些客户端，配置按官方文档格式写好，未实跑 |
 | 老的 SSE 传输（`GET /sse`） | ⬜ 未实现，只支持 Streamable HTTP；SSE-only 的客户端请改用 stdio |
 
@@ -213,7 +238,7 @@ cd C:\Users\29390\OneDrive\Desktop\AgentMemory
 '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | & "E:\Tool\Node.js\node.exe" server\mcp.js
 ```
 
-返回里有 6 个工具名就是通的。它会把库建在 `~/.agentmemory/memory.db`，想换位置就先 `$env:AGENTMEMORY_DB = "..."`。
+返回里有 8 个工具名就是通的。它会把库建在 `~/.agentmemory/memory.db`，想换位置就先 `$env:AGENTMEMORY_DB = "..."`。
 
 官方 Inspector（可选，需要网络）：
 

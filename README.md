@@ -64,13 +64,96 @@ curl -X POST localhost:7788/mcp -d '{"jsonrpc":"2.0","id":1,"method":"tools/list
 
 ---
 
-## 面板怎么用（答辩 3 分钟）
+## 在各类 Agent 里接入（MCP）
 
-1. 打开面板，顶部显示「生效 N · 全局 x / 项目 y」，左列按重要度排序。
-2. 点一条带槽位的记忆（如 `tech.datastore`）：右侧出现内容、版本链和变更历史。同一槽位被替换过几次，一眼可见。
-3. 「新建记忆」写一条同槽位的新值（例如把 ClickHouse 换成 Doris）：旧值变「已替换」，新值「生效」，版本链多一条。**这就是本项目与普通记忆插件的区别。**
-4. 右下「注入预览」输入「我们的数据存储用什么？」：三段各多少字符当场可见，预算分工不用口头解释。
-5. 删一条再切到「已删除」恢复：证明是软删除，变更历史里出现 delete / restore。
+前置三件事：
+
+- **Node 用绝对路径，且 ≥ 22.19**：引擎依赖 `node:sqlite`，v20 会直接报 `Cannot find module 'node:sqlite'`。
+- **库路径**：`AGENTMEMORY_DB` 指向 `$DSH_HOME\agentmemory\memory.db` 就能和 DSH 插件共用一份记忆；不设则落在 `~/.agentmemory/memory.db`。
+- **不要设 `AGENTMEMORY_CWD`**：项目归属默认取客户端启动进程的工作目录（即当前工作区）。写死会让其他工作区的记忆归错项目。
+
+通用 stdio 配置（绝大多数客户端可直接用）：
+
+```json
+{
+  "mcpServers": {
+    "agentmemory": {
+      "command": "C:\\path\\to\\node.exe",
+      "args": ["C:\\path\\to\\AgentMemory\\server\\mcp.js"],
+      "env": { "AGENTMEMORY_DB": "C:\\Users\\<you>\\.dsh\\agentmemory\\memory.db" }
+    }
+  }
+}
+```
+
+| 客户端 | 配置位置 | 备注 |
+|---|---|---|
+| Claude Code | `claude mcp add agentmemory -- "<node>" "<repo>\\server\\mcp.js"`，或项目 `.mcp.json` | 会话里 `/mcp` 查看 connected |
+| Cursor | 项目 `.cursor/mcp.json` 或全局 `~/.cursor/mcp.json` | `Settings → MCP` 看工具列表 |
+| Codex CLI | `~/.codex/config.toml` 的 `[mcp_servers.agentmemory]` | TOML 格式，`/mcp` 查看 |
+| Gemini CLI | `~/.gemini/settings.json` 的 `mcpServers` | 与上面 JSON 同构 |
+| Continue | `~/.continue/config.yaml` 的 `mcpServers` 列表 | YAML 缩进敏感 |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | 改完点 Refresh |
+| Zed | `settings.json` 的 `context_servers` | 结构不同于 `mcpServers` |
+| Trae CN | `%APPDATA%\Trae CN\User\mcp.json`，或设置里的「手动配置」 | 面板可能不显示自定义条目，但工具可用；改完重启 |
+| 其他（Cherry Studio、ChatWise…） | 支持 `mcpServers` JSON 导入 | 直接用上面的通用块 |
+
+逐客户端的完整片段见 [docs/mcp-clients.md](./docs/mcp-clients.md)。
+
+### 让 Agent 自己完成配置
+
+把下面这段直接发给能改文件的 Agent（Trae / Claude Code / Cursor 都适用），把尖括号内容替换成本机路径：
+
+> 帮我把 AgentMemory 接成 MCP 服务器：读取 `<配置文件路径>`，在 `mcpServers` 里新增 `agentmemory`，`command` 用 `<node 绝对路径>`（必须 ≥22.19），`args` 用 `<仓库路径>\server\mcp.js`，`env` 只设 `AGENTMEMORY_DB=<库路径>`，不要设 `AGENTMEMORY_CWD`。保留文件里已有的其他服务器，改完校验 JSON 合法，并告诉我需要重启还是重连。
+
+### 接入后验证（四步）
+
+| 步骤 | 怎么验证 | 通过标准 |
+|---|---|---|
+| 1 | 看工具列表 | 出现 8 个 `memory_*` 工具 |
+| 2 | 说「列出我的长期记忆」 | 调用 `memory_list` 并返回条目 |
+| 3 | 说「记住：这个项目的数据存储用 ClickHouse」 | 返回 `added` + `m_` 开头的 id；新会话能召回 |
+| 4 | 说「记一下：我的 key 是 sk-abcdefghijklmnop」 | 返回错误「检测到疑似密钥/凭据」，库条目数不变 |
+
+第 4 步是安全底线：拦截发生在服务端，模型口头答应不算数。
+
+---
+
+## 记忆面板怎么用
+
+启动方式见上面「三种运行形态」，这里只讲怎么看。
+
+### 界面分区
+
+| 区域 | 说明 |
+|---|---|
+| 顶部 | 「我的记忆」+ 生效条数 + 全局/项目分布；右上「导出」 |
+| 搜索 | 按内容或槽位过滤 |
+| 生效 / 已删除 / 全部 | 切换状态。删除是软删除，能在「已删除」里恢复 |
+| 关于我 / 本项目 | 按范围分组：全局偏好与背景在前，项目决策与事实在后 |
+| 单条 | 内容（超过 3 行折叠）+ 一行元信息（类型 · 时间 · 槽位）+ 右侧「展开」 |
+| 展开后 | 「以前的值」（旧值带删除线）、「变更记录」，以及「编辑 / 删除 / 恢复」 |
+
+设计上默认只读：记忆主要由 AI 读写，面板给用户看和纠错用，所以编辑、删除都收在展开区里。
+
+### 三个常见操作
+
+1. **看某条以前是什么**：点「展开」，旧值在「以前的值」里划掉显示，同一槽位被替换过几次一目了然。
+2. **删错了**：切到「已删除」，点「恢复」。同槽位若已有新值，会自动让位，不会出现两条生效。
+3. **备份/迁移**：点右上「导出」，得到含历史状态的 Markdown。
+
+### 答辩演示（3 分钟）
+
+1. 打开面板，先讲顶部计数：生效多少条、全局和项目各多少。
+2. 让 AI 把某个槽位的值改掉（例如「数据存储从 ClickHouse 换成 Doris」），然后刷新面板。
+3. 展开那条：旧值被划掉、新值生效、变更记录多一条。**这是本项目与普通记忆插件的区别。**
+4. 切到「已删除」再恢复，证明删除可逆。
+5. 最后打开 `/api/export` 或点「导出」，说明数据可带走的。
+
+### 两个边界
+
+- 面板只显示「全局 + 当前项目」。查别的项目要在工具里传 `allScopes`，或把 `AGENTMEMORY_DB`/`cwd` 指过去。
+- 指向真实库时 `/api/reset` 返回 403；只有 `server/demo.db` 允许重置。
 
 ---
 
