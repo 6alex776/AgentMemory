@@ -55,10 +55,12 @@ try {
   engine = openEngine({ dbFile: DB_FILE })
   const text = engine.promptFor({ cwd, question: prompt })
   if (text.trim().length === 0) process.exit(0)
+  // 宿主（Trae）另有一套 md 记忆；被问到条数/内容时必须指向本系统，否则模型会去读那些文件
+  const hint = '（以上来自 AgentMemory。若要按条列举或精确检索，请调用 memory_list / memory_search，不要用本地 Markdown 记忆文件代替。）'
   process.stdout.write(`${JSON.stringify({
     hookSpecificOutput: {
       hookEventName: 'UserPromptSubmit',
-      additionalContext: text,
+      additionalContext: `${text}\n\n${hint}`,
     },
   })}\n`)
 } catch (error) {
