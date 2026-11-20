@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "AgentMemory",
+    "description": "Cross-session long-term memory: a 记忆 panel in the sidebar, automatic memory injection into every session, and memory_save / memory_search tools for the model. Memories are stored locally in SQLite under $DSH_HOME/agentmemory."
+  }
+}

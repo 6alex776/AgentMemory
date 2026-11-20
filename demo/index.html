@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentMemory · 引擎演示</title>
+<style>
+  :root {
+    --bg: #14161b; --card: #1c1f26; --line: #2b3038; --text: #e7e9ef;
+    --muted: #8d95a5; --accent: #7aa2ff; --ok: #6ac99e; --warn: #e0a860;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 18px 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap;
+  }
+  .brand { font-size: 17px; font-weight: 600; letter-spacing: .2px; }
+  .brand .tag {
+    margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500;
+    color: var(--accent); border: 1px solid rgba(122,162,255,.4); background: rgba(122,162,255,.1);
+  }
+  .head-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  main {
+    display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
+    gap: 24px; padding: 24px; align-items: start; max-width: 1280px; margin: 0 auto;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 4px; font-weight: 600; }
+  .hint { margin: 0 0 14px; color: var(--muted); font-size: 12.5px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 16px; }
+  .card-head { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 10px; font-size: 13.5px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot.a { background: #7aa2ff; } .dot.b { background: #6ac99e; }
+  .muted { color: var(--muted); font-weight: 400; }
+  .small { font-size: 12px; }
+  textarea, input {
+    width: 100%; background: #14171d; color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 9px 10px; font: inherit; resize: vertical;
+  }
+  textarea:focus, input:focus { outline: 1px solid rgba(122,162,255,.6); border-color: transparent; }
+  .row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  button {
+    background: var(--accent); color: #12141a; border: 0; border-radius: 8px;
+    padding: 7px 14px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button:hover { filter: brightness(1.08); }
+  button.ghost {
+    background: transparent; color: var(--text); border: 1px solid var(--line); font-weight: 500; padding: 5px 12px;
+  }
+  button.ghost:hover { border-color: #3a4150; }
+  a.ghost { color: var(--text); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 5px 12px; font-size: 13px; }
+  .out:empty { display: none; }
+  .out { margin-top: 12px; display: grid; gap: 10px; }
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11.5px; border: 1px solid var(--line); color: var(--muted); }
+  .badge.added { color: var(--ok); border-color: rgba(106,201,158,.4); background: rgba(106,201,158,.1); }
+  .badge.superseded { color: var(--warn); border-color: rgba(224,168,96,.4); background: rgba(224,168,96,.1); }
+  .badge.duplicate, .badge.tombstoned { color: var(--muted); }
+  .blk { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .blk-head {
+    display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px;
+    background: #191c23; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line);
+  }
+  .blk pre {
+    margin: 0; padding: 10px; white-space: pre-wrap; word-break: break-word;
+    font: 12.5px/1.65 ui-monospace, "Cascadia Code", Consolas, monospace; color: #d5d9e3;
+  }
+  .blk pre.empty { color: #5b6270; font-style: italic; }
+  mark { background: rgba(122,162,255,.28); color: #cfe0ff; border-radius: 3px; padding: 0 2px; }
+  .group { margin-bottom: 16px; }
+  .group-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .group-head b { font-size: 13px; } .group-head span { color: var(--muted); font-size: 11.5px; }
+  .item {
+    border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; margin-bottom: 8px;
+    background: var(--card); cursor: pointer; transition: border-color .12s;
+  }
+  .item:hover { border-color: #3a4150; }
+  .item .meta { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-size: 11.5px; color: var(--muted); flex-wrap: wrap; }
+  .item .content { font-size: 13px; }
+  .chain-old { color: var(--muted); text-decoration: line-through; }
+  .chain-row { display: grid; gap: 2px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 12.5px; }
+  .chain-row:last-child { border-bottom: 0; }
+  .chain-row .t { color: var(--muted); font-size: 11.5px; }
+  footer { padding: 14px 24px 28px; color: var(--muted); font-size: 12px; text-align: center; }
+  code { font: 12px ui-monospace, Consolas, monospace; background: #1a1d24; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">AgentMemory <span class="tag">引擎演示</span></div>
+  <div class="head-right">
+    <span id="counts" class="muted small"></span>
+    <button id="reset" class="ghost">重置演示</button>
+    <a class="ghost" href="/api/export" target="_blank" rel="noreferrer">导出 Markdown</a>
+  </div>
+</header>
+
+<main>
+  <section class="col">
+    <h2>两个会话</h2>
+    <p class="hint">它们不共享任何上下文，只共用同一个 SQLite 文件。记忆存在会话之外。</p>
+
+    <article class="card">
+      <div class="card-head"><span class="dot a"></span>会话 A <span class="muted small">已经聊过几轮</span></div>
+      <textarea id="sayText" rows="2">把数据存储从 PostgreSQL 换成了 ClickHouse</textarea>
+      <div class="row">
+        <button id="sayBtn">发送</button>
+        <span class="muted small">演示用规则抽取器（真实部署里这一步由模型完成）</span>
+      </div>
+      <div id="sayOut" class="out"></div>
+    </article>
+
+    <article class="card">
+      <div class="card-head"><span class="dot b"></span>会话 B <span class="muted small">全新会话，零上下文</span></div>
+      <input id="askText" value="我们的数据存储用什么？">
+      <div class="row"><button id="askBtn">提问</button><span class="muted small">只把问题发给引擎，不告诉它别的</span></div>
+      <p class="muted small" style="margin:8px 0 0">
+        试试：<a href="#" class="q" style="color:var(--accent)">我们的数据存储用什么？</a> ·
+        <a href="#" class="q" style="color:var(--accent)">行情数据是怎么模拟的？</a>
+      </p>
+      <div id="askOut" class="out"></div>
+    </article>
+
+    <article class="card" id="chainCard" hidden>
+      <div class="card-head" style="justify-content:space-between;width:100%">
+        <span>版本链</span><button id="chainClose" class="ghost small">关闭</button>
+      </div>
+      <div id="chainOut"></div>
+    </article>
+  </section>
+
+  <section class="col">
+    <h2>记忆库</h2>
+    <p class="hint">点一条，看这个槽位被替换过几次。</p>
+    <div id="library"><p class="muted small">加载中…</p></div>
+  </section>
+</main>
+
+<footer>
+  注入分三段：身份块（全局，会话内冻结）、项目块（每轮重建）、检索块（按问题，去重后补充）。
+  同一槽位的旧值不删除，标为「已被替换」并保留版本链。
+</footer>
+
+<script>
+const HIGHLIGHT = ['ClickHouse', 'PostgreSQL']
+const KIND_LABEL = { profile: '背景', preference: '偏好', fact: '事实', decision: '决策', lesson: '经验', episode: '事件' }
+
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const hl = (s) => HIGHLIGHT.reduce((acc, word) => acc.split(esc(word)).join(`<mark>${esc(word)}</mark>`), esc(s))
+const time = (ts) => ts ? new Date(ts).toLocaleString('zh-CN', { hour12: false }) : '—'
+
+function block(title, text, chars) {
+  const body = text && text.trim().length > 0
+    ? `<pre>${hl(text)}</pre>`
+    : '<pre class="empty">（这一块为空）</pre>'
+  return `<div class="blk"><div class="blk-head"><span>${esc(title)}</span><span>${chars ?? 0} 字符</span></div>${body}</div>`
+}
+
+function injectHtml(inject) {
+  const retrievalEmpty = !inject.retrieval.text || inject.retrieval.text.trim().length === 0
+  return [
+    block('常驻 · 身份块（全局，会话内冻结）', inject.identity.text, inject.identity.chars),
+    block('常驻 · 项目块（每轮重建）', inject.project.text, inject.project.chars),
+    block('检索 · 按问题补充（已去重）', inject.retrieval.text, inject.retrieval.chars),
+  ].join('') + (retrievalEmpty
+    ? '<p class="muted small" style="margin:0">检索块为空：和这个问题相关的记忆已经全在常驻块里，去重后没有补充。</p>'
+    : '')
+}
+
+async function api(path, options) {
+  const res = await fetch(path, options)
+  const data = await res.json()
+  if (!res.ok || data.ok === false) throw new Error(data.error ?? `HTTP ${res.status}`)
+  return data
+}
+
+function renderCounts(state) {
+  const c = state.counts
+  document.getElementById('counts').textContent =
+    `生效 ${c.total} 条 · 全局 ${c.global} / 项目 ${c.project} · 已替换 ${c.superseded}`
+}
+
+function renderLibrary(state) {
+  const library = document.getElementById('library')
+  if (state.groups.length === 0) { library.innerHTML = '<p class="muted small">还没有记忆。</p>'; return }
+  library.innerHTML = state.groups.map((group) => `
+    <div class="group">
+      <div class="group-head"><b>${esc(group.title)}</b><span>${esc(group.subtitle)}</span></div>
+      ${group.items.map((item) => `
+        <div class="item" data-topic="${esc(item.topic_key ?? '')}" data-scope="${esc(item.scope)}">
+          <div class="content">${esc(item.content)}</div>
+          <div class="meta">
+            <span class="badge">${KIND_LABEL[item.kind] ?? item.kind}</span>
+            <span>重要度 ${item.importance}</span>
+            <span>${time(item.updated_at)}</span>
+            ${item.topic_key ? `<span>槽位 <code>${esc(item.topic_key)}</code></span>` : '<span class="muted">无槽位（普通事实）</span>'}
+          </div>
+        </div>`).join('')}
+    </div>`).join('')
+
+  for (const el of library.querySelectorAll('.item')) {
+    el.addEventListener('click', () => openChain(el.dataset.topic, el.dataset.scope))
+  }
+}
+
+async function refresh() {
+  const { state } = await api('/api/state')
+  renderCounts(state)
+  renderLibrary(state)
+  return state
+}
+
+async function openChain(topic, scope) {
+  const card = document.getElementById('chainCard')
+  const out = document.getElementById('chainOut')
+  if (!topic) { out.innerHTML = '<p class="muted small">这条没有槽位，所以不会被别的记忆替换。</p>'; card.hidden = false; return }
+  const { chain } = await api(`/api/chain?topic=${encodeURIComponent(topic)}&scope=${encodeURIComponent(scope)}`)
+  out.innerHTML = `<p class="muted small">槽位 <code>${esc(topic)}</code> 的版本链（旧 → 新，共 ${chain.length} 条）</p>` +
+    chain.map((row) => `
+      <div class="chain-row">
+        <div class="${row.status === 'active' ? '' : 'chain-old'}">${esc(row.content)}</div>
+        <div class="t">${time(row.created_at)} · ${row.status === 'active' ? '当前生效' : '已被替换'}</div>
+      </div>`).join('')
+  card.hidden = false
+}
+
+document.getElementById('chainClose').addEventListener('click', () => {
+  document.getElementById('chainCard').hidden = true
+})
+
+document.getElementById('sayBtn').addEventListener('click', async () => {
+  const out = document.getElementById('sayOut')
+  const text = document.getElementById('sayText').value
+  out.innerHTML = '<p class="muted small">发送中…</p>'
+  try {
+    const data = await api('/api/say', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+    const r = data.result
+    const head = `<div class="meta small muted">抽取出：${KIND_LABEL[data.extracted.kind] ?? data.extracted.kind}` +
+      `${data.extracted.topicKey ? ` · 槽位 <code>${esc(data.extracted.topicKey)}</code>` : ' · 无槽位'}` +
+      ` · ${esc(data.extracted.basis)}</div>`
+    let body
+    if (r.status === 'superseded' && data.replaced) {
+      body = `<div><span class="badge superseded">替换旧值</span>
+        <div class="small" style="margin-top:6px"><span class="chain-old">${esc(data.replaced.content)}</span></div>
+        <div>→ ${esc(data.extracted.content)}</div></div>`
+    } else if (r.status === 'added') {
+      body = `<div><span class="badge added">新增</span> ${esc(data.extracted.content)}</div>`
+    } else if (r.status === 'duplicate') {
+      body = `<div><span class="badge duplicate">已存在</span> 和现有记忆重复，没有写入。</div>`
+    } else {
+      body = `<div><span class="badge tombstoned">已删除过</span> 这条槽位曾被你删除，没有自动复活。</div>`
+    }
+    out.innerHTML = head + body + `<div class="small muted">本轮注入（${data.inject.chars} 字符）</div>` + injectHtml(data.inject)
+    await refresh()
+  } catch (error) {
+    out.innerHTML = `<p class="muted small">出错了：${esc(error.message)}</p>`
+  }
+})
+
+document.getElementById('askBtn').addEventListener('click', async () => {
+  const out = document.getElementById('askOut')
+  const question = document.getElementById('askText').value
+  out.innerHTML = '<p class="muted small">查询中…</p>'
+  try {
+    const { inject } = await api(`/api/inject?q=${encodeURIComponent(question)}`)
+    out.innerHTML = `<div class="small muted">会话 B 只说了这一句，引擎给它的全部上下文共 ${inject.chars} 字符：</div>` + injectHtml(inject)
+  } catch (error) {
+    out.innerHTML = `<p class="muted small">出错了：${esc(error.message)}</p>`
+  }
+})
+
+document.getElementById('reset').addEventListener('click', async () => {  await api('/api/reset', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
+  document.getElementById('sayOut').innerHTML = ''
+  document.getElementById('askOut').innerHTML = ''
+  document.getElementById('chainCard').hidden = true
+  await refresh()
+})
+
+for (const link of document.querySelectorAll('a.q')) {
+  link.addEventListener('click', (event) => {
+    event.preventDefault()
+    document.getElementById('askText').value = link.textContent.trim()
+    document.getElementById('askBtn').click()
+  })
+}
+
+refresh()
+</script>
+</body>
+</html>

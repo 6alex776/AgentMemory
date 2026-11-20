@@ -1,0 +1,57 @@
+# 依赖
+node_modules/
+.pnpm-store/
+
+# 本地数据库（演示库可重新生成，真实库在 $DSH_HOME/agentmemory）
+*.db
+*.db-wal
+*.db-shm
+
+# 探针脚本、参照插件解包、临时验证产物（非交付物）
+.tmp/
+
+# npm 缓存与日志
+.npm-cache/
+npm-debug.log*
+*-debug-0.log
+*.log
+
+# 环境变量与密钥
+.env
+.env.*
+!.env.example
+
+# 界面截图（需要进论文的另存到 docs/images/）
+.screenshots/
+
+# 编辑器与系统文件
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# 测试与构建产物
+coverage/
+dist/
+build/
+*.tgz
+
+# SQLite 回滚日志与其它库文件（*.db-wal/-shm 已覆盖，补 -journal）
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# 编辑器本地历史与备份
+.history/
+*.bak
+*.orig
+*.rej
+*.swp
+*~
+
+# 工具与进程缓存
+.trae/
+.cache/
+*.tsbuildinfo
+*.pid

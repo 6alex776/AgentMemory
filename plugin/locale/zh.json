@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "AgentMemory 长期记忆",
+    "description": "跨会话长期记忆：侧栏「记忆」面板、每轮会话自动注入、以及 memory_save / memory_search 等记忆工具。记忆以 SQLite 存在本地 $DSH_HOME/agentmemory 下，可随时编辑、删除或恢复。"
+  }
+}

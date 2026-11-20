@@ -1,0 +1,10 @@
+{
+  "name": "agentmemory-server",
+  "private": true,
+  "type": "module",
+  "description": "Standalone demo host for the AgentMemory engine",
+  "scripts": {
+    "start": "node http.js",
+    "mcp": "node mcp.js"
+  }
+}

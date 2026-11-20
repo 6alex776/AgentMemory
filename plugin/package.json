@@ -1,0 +1,48 @@
+{
+  "name": "dsh-agentmemory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "跨会话长期记忆：侧栏记忆面板、自动注入与记忆工具。",
+  "license": "MIT",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "plugin",
+    "memory",
+    "long-term-memory",
+    "sqlite"
+  ],
+  "engines": {
+    "dsh": "^0.2.2-rc.5",
+    "node": ">=22.19"
+  },
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node test/store.test.js && node test/capture.test.js && node test/retrieval.test.js && node test/dream.test.js && node test/export.test.js && node test/lifecycle.test.js && node test/session-text.test.js && node test/block.test.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}
