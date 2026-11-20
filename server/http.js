@@ -160,6 +160,55 @@ const server = createServer(async (req, res) => {
       return
     }
 
+    // ---------------------------------------------------------------- 管理面板
+    if (req.method === 'GET' && path === '/api/list') {
+      const status = url.searchParams.get('status') ?? 'active'
+      const scope = url.searchParams.get('scope') ?? undefined
+      const rows = engine.store.list({
+        status: status === 'all' ? 'all' : undefined,
+        statuses: status === 'all' ? undefined : [status],
+        scope: scope === 'global' || scope === 'project' ? scope : undefined,
+        limit: 500,
+      })
+      return sendJson(res, { ok: true, rows })
+    }
+
+    if (req.method === 'GET' && path === '/api/get') {
+      const row = engine.get(url.searchParams.get('id') ?? '')
+      return row === undefined
+        ? sendJson(res, { ok: false, error: '没有这条记忆' }, 404)
+        : sendJson(res, { ok: true, row })
+    }
+
+    if (req.method === 'POST' && path === '/api/update') {
+      const body = await readBody(req)
+      const patch = {}
+      if (typeof body.content === 'string') patch.content = body.content
+      if (typeof body.kind === 'string') patch.kind = body.kind
+      if (Number.isFinite(Number(body.importance))) patch.importance = Number(body.importance)
+      if (body.pinned !== undefined) patch.pinned = body.pinned === true
+      const updated = engine.update(String(body.id ?? ''), patch)
+      return updated
+        ? sendJson(res, { ok: true })
+        : sendJson(res, { ok: false, error: '更新失败：条目不存在或已失效' }, 400)
+    }
+
+    if (req.method === 'POST' && path === '/api/forget') {
+      const body = await readBody(req)
+      const forgotten = engine.forget(String(body.id ?? ''))
+      return forgotten
+        ? sendJson(res, { ok: true })
+        : sendJson(res, { ok: false, error: '删除失败：条目不存在或已失效' }, 400)
+    }
+
+    if (req.method === 'POST' && path === '/api/restore') {
+      const body = await readBody(req)
+      const restored = engine.restore(String(body.id ?? ''))
+      return restored
+        ? sendJson(res, { ok: true })
+        : sendJson(res, { ok: false, error: '恢复失败：只有已删除的条目可以恢复' }, 400)
+    }
+
     if (req.method === 'POST' && path === '/api/say') {
       const body = await readBody(req)
       const text = String(body.text ?? '').trim()
@@ -207,6 +256,10 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && path === '/api/reset') {
+      // 真实库不允许重置：这个接口是演示用的，误点一次就会清空用户记忆
+      if (!/demo\.db$/i.test(DB_FILE)) {
+        return sendJson(res, { ok: false, error: '真实记忆库禁止重置（只允许 server/demo.db）' }, 403)
+      }
       engine.close()
       for (const suffix of ['', '-wal', '-shm']) {
         rmSync(`${DB_FILE}${suffix}`, { force: true })

@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AgentMemory · 引擎演示</title>
+<title>AgentMemory · 记忆面板</title>
 <style>
   :root {
-    --bg: #14161b; --card: #1c1f26; --line: #2b3038; --text: #e7e9ef;
-    --muted: #8d95a5; --accent: #7aa2ff; --ok: #6ac99e; --warn: #e0a860;
+    --bg: #14161b; --card: #1b1e25; --line: #2a2f38; --text: #e7e9ef;
+    --muted: #8a92a3; --accent: #7aa2ff; --ok: #6ac99e; --warn: #e0a860; --danger: #e07070;
   }
   * { box-sizing: border-box; }
   body {
@@ -15,159 +15,210 @@
     font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
   }
   header {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 18px 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 14px 22px; border-bottom: 1px solid var(--line);
   }
-  .brand { font-size: 17px; font-weight: 600; letter-spacing: .2px; }
-  .brand .tag {
-    margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500;
-    color: var(--accent); border: 1px solid rgba(122,162,255,.4); background: rgba(122,162,255,.1);
-  }
+  .brand { font-size: 16px; font-weight: 600; }
+  .brand .db { margin-left: 10px; font: 11.5px ui-monospace, Consolas, monospace; color: var(--muted); }
   .head-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  main {
-    display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
-    gap: 24px; padding: 24px; align-items: start; max-width: 1280px; margin: 0 auto;
-  }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 4px; font-weight: 600; }
-  .hint { margin: 0 0 14px; color: var(--muted); font-size: 12.5px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 16px; }
-  .card-head { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 10px; font-size: 13.5px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-  .dot.a { background: #7aa2ff; } .dot.b { background: #6ac99e; }
-  .muted { color: var(--muted); font-weight: 400; }
-  .small { font-size: 12px; }
-  textarea, input {
-    width: 100%; background: #14171d; color: var(--text); border: 1px solid var(--line);
-    border-radius: 8px; padding: 9px 10px; font: inherit; resize: vertical;
-  }
-  textarea:focus, input:focus { outline: 1px solid rgba(122,162,255,.6); border-color: transparent; }
-  .row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .counts { color: var(--muted); font-size: 12px; }
+  button, select, input, textarea { font: inherit; color: var(--text); }
   button {
     background: var(--accent); color: #12141a; border: 0; border-radius: 8px;
-    padding: 7px 14px; font: inherit; font-weight: 600; cursor: pointer;
+    padding: 6px 13px; font-weight: 600; cursor: pointer;
   }
   button:hover { filter: brightness(1.08); }
-  button.ghost {
-    background: transparent; color: var(--text); border: 1px solid var(--line); font-weight: 500; padding: 5px 12px;
-  }
+  button.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); font-weight: 500; }
   button.ghost:hover { border-color: #3a4150; }
-  a.ghost { color: var(--text); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 5px 12px; font-size: 13px; }
-  .out:empty { display: none; }
-  .out { margin-top: 12px; display: grid; gap: 10px; }
-  .badge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11.5px; border: 1px solid var(--line); color: var(--muted); }
-  .badge.added { color: var(--ok); border-color: rgba(106,201,158,.4); background: rgba(106,201,158,.1); }
-  .badge.superseded { color: var(--warn); border-color: rgba(224,168,96,.4); background: rgba(224,168,96,.1); }
-  .badge.duplicate, .badge.tombstoned { color: var(--muted); }
-  .blk { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-  .blk-head {
-    display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px;
-    background: #191c23; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line);
+  button.danger { background: transparent; border: 1px solid rgba(224,112,112,.45); color: var(--danger); font-weight: 500; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  a.link { color: var(--text); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 5px 12px; font-size: 13px; }
+  .toolbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 12px 22px; border-bottom: 1px solid var(--line);
   }
-  .blk pre {
-    margin: 0; padding: 10px; white-space: pre-wrap; word-break: break-word;
-    font: 12.5px/1.65 ui-monospace, "Cascadia Code", Consolas, monospace; color: #d5d9e3;
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    background: transparent; color: var(--muted); border-radius: 0; font-weight: 500; padding: 5px 12px; font-size: 12.5px;
   }
-  .blk pre.empty { color: #5b6270; font-style: italic; }
-  mark { background: rgba(122,162,255,.28); color: #cfe0ff; border-radius: 3px; padding: 0 2px; }
-  .group { margin-bottom: 16px; }
-  .group-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
-  .group-head b { font-size: 13px; } .group-head span { color: var(--muted); font-size: 11.5px; }
+  .seg button.on { background: rgba(122,162,255,.14); color: var(--accent); }
+  .search { flex: 1 1 220px; min-width: 180px; }
+  input, select, textarea {
+    background: #14171d; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { outline: 1px solid rgba(122,162,255,.55); border-color: transparent; }
+  main {
+    display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .95fr);
+    gap: 18px; padding: 18px 22px 40px; max-width: 1400px; margin: 0 auto; align-items: start;
+  }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--muted);
+  }
+  .list { max-height: calc(100vh - 210px); overflow: auto; }
   .item {
-    border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; margin-bottom: 8px;
-    background: var(--card); cursor: pointer; transition: border-color .12s;
+    padding: 11px 14px; border-bottom: 1px solid var(--line); cursor: pointer; display: grid; gap: 5px;
   }
-  .item:hover { border-color: #3a4150; }
-  .item .meta { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-size: 11.5px; color: var(--muted); flex-wrap: wrap; }
-  .item .content { font-size: 13px; }
+  .item:last-child { border-bottom: 0; }
+  .item:hover { background: #1f232b; }
+  .item.on { background: rgba(122,162,255,.09); box-shadow: inset 2px 0 0 var(--accent); }
+  .item .text { font-size: 13px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .item .meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+  .badge {
+    display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px;
+    border: 1px solid var(--line); color: var(--muted); white-space: nowrap;
+  }
+  .badge.active { color: var(--ok); border-color: rgba(106,201,158,.4); background: rgba(106,201,158,.08); }
+  .badge.superseded { color: var(--warn); border-color: rgba(224,168,96,.4); background: rgba(224,168,96,.08); }
+  .badge.deleted { color: var(--danger); border-color: rgba(224,112,112,.4); background: rgba(224,112,112,.08); }
+  .badge.pinned { color: var(--accent); border-color: rgba(122,162,255,.4); }
+  .detail { padding: 14px; display: grid; gap: 12px; }
+  .empty { padding: 40px 16px; text-align: center; color: var(--muted); font-size: 12.5px; }
+  .field { display: grid; gap: 5px; }
+  .field label { font-size: 11.5px; color: var(--muted); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  code { font: 11.5px ui-monospace, Consolas, monospace; background: #1a1d24; padding: 1px 5px; border-radius: 4px; }
+  .history { display: grid; gap: 6px; max-height: 200px; overflow: auto; }
+  .hist-row { display: grid; gap: 2px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 12px; }
+  .hist-row:last-child { border-bottom: 0; }
+  .hist-row .t { color: var(--muted); font-size: 11px; }
   .chain-old { color: var(--muted); text-decoration: line-through; }
-  .chain-row { display: grid; gap: 2px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 12.5px; }
-  .chain-row:last-child { border-bottom: 0; }
-  .chain-row .t { color: var(--muted); font-size: 11.5px; }
-  footer { padding: 14px 24px 28px; color: var(--muted); font-size: 12px; text-align: center; }
-  code { font: 12px ui-monospace, Consolas, monospace; background: #1a1d24; padding: 1px 5px; border-radius: 4px; }
+  .blk { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-top: 8px; }
+  .blk-head {
+    display: flex; justify-content: space-between; padding: 6px 10px; font-size: 11.5px; color: var(--muted);
+    background: #191c23; border-bottom: 1px solid var(--line);
+  }
+  .blk pre { margin: 0; padding: 9px 10px; white-space: pre-wrap; word-break: break-word;
+    font: 12px/1.6 ui-monospace, Consolas, monospace; color: #d5d9e3; }
+  .blk pre.empty { color: #5b6270; font-style: italic; }
+  dialog {
+    background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
+    padding: 18px; width: min(520px, 92vw);
+  }
+  dialog::backdrop { background: rgba(0,0,0,.5); }
+  dialog h3 { margin: 0 0 12px; font-size: 15px; }
+  .toast {
+    position: fixed; right: 20px; bottom: 20px; background: #232833; border: 1px solid var(--line);
+    border-radius: 10px; padding: 9px 14px; font-size: 12.5px; opacity: 0; transform: translateY(8px);
+    transition: .18s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: none; }
+  .toast.err { border-color: rgba(224,112,112,.5); color: var(--danger); }
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">AgentMemory <span class="tag">引擎演示</span></div>
+  <div class="brand">AgentMemory <span class="db" id="dbPath"></span></div>
   <div class="head-right">
-    <span id="counts" class="muted small"></span>
-    <button id="reset" class="ghost">重置演示</button>
-    <a class="ghost" href="/api/export" target="_blank" rel="noreferrer">导出 Markdown</a>
+    <span class="counts" id="counts"></span>
+    <button class="ghost" id="btnAdd">新建记忆</button>
+    <a class="link" href="/api/export" target="_blank" rel="noreferrer">导出 Markdown</a>
   </div>
 </header>
 
+<div class="toolbar">
+  <input class="search" id="search" placeholder="搜索内容、槽位或 id…">
+  <div class="seg" id="scopeSeg">
+    <button data-v="" class="on">全部</button>
+    <button data-v="global">全局</button>
+    <button data-v="project">项目</button>
+  </div>
+  <div class="seg" id="statusSeg">
+    <button data-v="active" class="on">生效</button>
+    <button data-v="deleted">已删除</button>
+    <button data-v="superseded">已替换</button>
+    <button data-v="all">全部</button>
+  </div>
+  <select id="kind" style="width:auto">
+    <option value="">全部类型</option>
+    <option value="profile">背景</option>
+    <option value="preference">偏好</option>
+    <option value="fact">事实</option>
+    <option value="decision">决策</option>
+    <option value="lesson">经验</option>
+    <option value="episode">事件</option>
+  </select>
+</div>
+
 <main>
-  <section class="col">
-    <h2>两个会话</h2>
-    <p class="hint">它们不共享任何上下文，只共用同一个 SQLite 文件。记忆存在会话之外。</p>
-
-    <article class="card">
-      <div class="card-head"><span class="dot a"></span>会话 A <span class="muted small">已经聊过几轮</span></div>
-      <textarea id="sayText" rows="2">把数据存储从 PostgreSQL 换成了 ClickHouse</textarea>
-      <div class="row">
-        <button id="sayBtn">发送</button>
-        <span class="muted small">演示用规则抽取器（真实部署里这一步由模型完成）</span>
-      </div>
-      <div id="sayOut" class="out"></div>
-    </article>
-
-    <article class="card">
-      <div class="card-head"><span class="dot b"></span>会话 B <span class="muted small">全新会话，零上下文</span></div>
-      <input id="askText" value="我们的数据存储用什么？">
-      <div class="row"><button id="askBtn">提问</button><span class="muted small">只把问题发给引擎，不告诉它别的</span></div>
-      <p class="muted small" style="margin:8px 0 0">
-        试试：<a href="#" class="q" style="color:var(--accent)">我们的数据存储用什么？</a> ·
-        <a href="#" class="q" style="color:var(--accent)">行情数据是怎么模拟的？</a>
-      </p>
-      <div id="askOut" class="out"></div>
-    </article>
-
-    <article class="card" id="chainCard" hidden>
-      <div class="card-head" style="justify-content:space-between;width:100%">
-        <span>版本链</span><button id="chainClose" class="ghost small">关闭</button>
-      </div>
-      <div id="chainOut"></div>
-    </article>
+  <section class="panel">
+    <div class="panel-head"><span id="listTitle">记忆</span><span id="listCount"></span></div>
+    <div class="list" id="list"></div>
   </section>
 
-  <section class="col">
-    <h2>记忆库</h2>
-    <p class="hint">点一条，看这个槽位被替换过几次。</p>
-    <div id="library"><p class="muted small">加载中…</p></div>
+  <section style="display:grid;gap:18px">
+    <div class="panel">
+      <div class="panel-head"><span>详情</span><span id="detailMeta"></span></div>
+      <div id="detail"><div class="empty">从左边选一条记忆</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><span>注入预览</span><span class="small">按问题检索，三段合计字符数</span></div>
+      <div style="padding:12px">
+        <div class="row">
+          <input id="q" placeholder="输入一个问题，看这一轮会注入什么" style="flex:1">
+          <button class="ghost" id="btnInject">预览</button>
+        </div>
+        <div id="injectOut"></div>
+      </div>
+    </div>
   </section>
 </main>
 
-<footer>
-  注入分三段：身份块（全局，会话内冻结）、项目块（每轮重建）、检索块（按问题，去重后补充）。
-  同一槽位的旧值不删除，标为「已被替换」并保留版本链。
-</footer>
+<dialog id="addDialog">
+  <h3>新建记忆</h3>
+  <div style="display:grid;gap:10px">
+    <div class="grid2">
+      <div class="field"><label>范围</label>
+        <select id="fScope"><option value="global">全局</option><option value="project" selected>项目</option></select>
+      </div>
+      <div class="field"><label>类型</label>
+        <select id="fKind">
+          <option value="decision">决策</option><option value="fact">事实</option>
+          <option value="preference">偏好</option><option value="profile">背景</option>
+          <option value="lesson">经验</option><option value="episode">事件</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>槽位（可选，同槽位会替换旧值）</label><input id="fTopic" placeholder="tech.datastore"></div>
+      <div class="field"><label>重要度</label>
+        <select id="fImportance"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select>
+      </div>
+    </div>
+    <div class="field"><label>内容</label><textarea id="fContent" rows="3" placeholder="一句自包含的话"></textarea></div>
+    <div class="row" style="justify-content:flex-end">
+      <button class="ghost" id="addCancel">取消</button>
+      <button id="addSave">保存</button>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
 
 <script>
-const HIGHLIGHT = ['ClickHouse', 'PostgreSQL']
 const KIND_LABEL = { profile: '背景', preference: '偏好', fact: '事实', decision: '决策', lesson: '经验', episode: '事件' }
+const OP_LABEL = { create: '创建', update: '修改', supersede: '替换', merge: '合并', expire: '过期', delete: '删除', restore: '恢复', rollback: '回滚' }
+const STATUS_LABEL = { active: '生效', superseded: '已替换', deleted: '已删除' }
+
+const filters = { scope: '', status: 'active', kind: '', q: '' }
+const view = { rows: [], selected: null, history: [], chain: [] }
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
-const hl = (s) => HIGHLIGHT.reduce((acc, word) => acc.split(esc(word)).join(`<mark>${esc(word)}</mark>`), esc(s))
 const time = (ts) => ts ? new Date(ts).toLocaleString('zh-CN', { hour12: false }) : '—'
+const $ = (id) => document.getElementById(id)
 
-function block(title, text, chars) {
-  const body = text && text.trim().length > 0
-    ? `<pre>${hl(text)}</pre>`
-    : '<pre class="empty">（这一块为空）</pre>'
-  return `<div class="blk"><div class="blk-head"><span>${esc(title)}</span><span>${chars ?? 0} 字符</span></div>${body}</div>`
-}
-
-function injectHtml(inject) {
-  const retrievalEmpty = !inject.retrieval.text || inject.retrieval.text.trim().length === 0
-  return [
-    block('常驻 · 身份块（全局，会话内冻结）', inject.identity.text, inject.identity.chars),
-    block('常驻 · 项目块（每轮重建）', inject.project.text, inject.project.chars),
-    block('检索 · 按问题补充（已去重）', inject.retrieval.text, inject.retrieval.chars),
-  ].join('') + (retrievalEmpty
-    ? '<p class="muted small" style="margin:0">检索块为空：和这个问题相关的记忆已经全在常驻块里，去重后没有补充。</p>'
-    : '')
+function toast(message, isError = false) {
+  const el = $('toast')
+  el.textContent = message
+  el.className = `toast show${isError ? ' err' : ''}`
+  clearTimeout(toast.timer)
+  toast.timer = setTimeout(() => { el.className = 'toast' }, 2400)
 }
 
 async function api(path, options) {
@@ -177,121 +228,263 @@ async function api(path, options) {
   return data
 }
 
-function renderCounts(state) {
-  const c = state.counts
-  document.getElementById('counts').textContent =
-    `生效 ${c.total} 条 · 全局 ${c.global} / 项目 ${c.project} · 已替换 ${c.superseded}`
+async function loadCounts() {
+  try {
+    const { state } = await api('/api/state')
+    const c = state.counts
+    $('counts').textContent = `生效 ${c.total} · 全局 ${c.global} / 项目 ${c.project} · 已替换 ${c.superseded}`
+  } catch { /* 计数失败不影响列表 */ }
 }
 
-function renderLibrary(state) {
-  const library = document.getElementById('library')
-  if (state.groups.length === 0) { library.innerHTML = '<p class="muted small">还没有记忆。</p>'; return }
-  library.innerHTML = state.groups.map((group) => `
-    <div class="group">
-      <div class="group-head"><b>${esc(group.title)}</b><span>${esc(group.subtitle)}</span></div>
-      ${group.items.map((item) => `
-        <div class="item" data-topic="${esc(item.topic_key ?? '')}" data-scope="${esc(item.scope)}">
-          <div class="content">${esc(item.content)}</div>
-          <div class="meta">
-            <span class="badge">${KIND_LABEL[item.kind] ?? item.kind}</span>
-            <span>重要度 ${item.importance}</span>
-            <span>${time(item.updated_at)}</span>
-            ${item.topic_key ? `<span>槽位 <code>${esc(item.topic_key)}</code></span>` : '<span class="muted">无槽位（普通事实）</span>'}
-          </div>
-        </div>`).join('')}
+async function loadList() {
+  const params = new URLSearchParams()
+  params.set('status', filters.status)
+  if (filters.scope) params.set('scope', filters.scope)
+  const { rows } = await api(`/api/list?${params.toString()}`)
+  const keyword = filters.q.trim().toLowerCase()
+  view.rows = rows
+    .filter((row) => (filters.kind ? row.kind === filters.kind : true))
+    .filter((row) => keyword.length === 0 || [
+      row.content, row.abstract, row.topic_key, row.id, KIND_LABEL[row.kind],
+    ].some((field) => String(field ?? '').toLowerCase().includes(keyword)))
+    .sort((a, b) => b.importance - a.importance || b.updated_at - a.updated_at)
+  renderList()
+}
+
+function renderList() {
+  const list = $('list')
+  $('listCount').textContent = `${view.rows.length} 条`
+  if (view.rows.length === 0) {
+    list.innerHTML = '<div class="empty">没有符合条件的记忆</div>'
+    return
+  }
+  list.innerHTML = view.rows.map((row) => `
+    <div class="item${view.selected === row.id ? ' on' : ''}" data-id="${esc(row.id)}">
+      <div class="text">${esc(row.content)}</div>
+      <div class="meta">
+        <span class="badge ${row.status}">${STATUS_LABEL[row.status] ?? row.status}</span>
+        <span class="badge">${KIND_LABEL[row.kind] ?? row.kind}</span>
+        <span>${row.scope === 'global' ? '全局' : '项目'}</span>
+        <span>重要度 ${row.importance}</span>
+        ${row.pinned ? '<span class="badge pinned">已固定</span>' : ''}
+        <span>${time(row.updated_at)}</span>
+        ${row.topic_key ? `<code>${esc(row.topic_key)}</code>` : ''}
+      </div>
     </div>`).join('')
 
-  for (const el of library.querySelectorAll('.item')) {
-    el.addEventListener('click', () => openChain(el.dataset.topic, el.dataset.scope))
+  for (const el of list.querySelectorAll('.item')) {
+    el.addEventListener('click', () => select(el.dataset.id))
   }
 }
 
-async function refresh() {
-  const { state } = await api('/api/state')
-  renderCounts(state)
-  renderLibrary(state)
-  return state
-}
-
-async function openChain(topic, scope) {
-  const card = document.getElementById('chainCard')
-  const out = document.getElementById('chainOut')
-  if (!topic) { out.innerHTML = '<p class="muted small">这条没有槽位，所以不会被别的记忆替换。</p>'; card.hidden = false; return }
-  const { chain } = await api(`/api/chain?topic=${encodeURIComponent(topic)}&scope=${encodeURIComponent(scope)}`)
-  out.innerHTML = `<p class="muted small">槽位 <code>${esc(topic)}</code> 的版本链（旧 → 新，共 ${chain.length} 条）</p>` +
-    chain.map((row) => `
-      <div class="chain-row">
-        <div class="${row.status === 'active' ? '' : 'chain-old'}">${esc(row.content)}</div>
-        <div class="t">${time(row.created_at)} · ${row.status === 'active' ? '当前生效' : '已被替换'}</div>
-      </div>`).join('')
-  card.hidden = false
-}
-
-document.getElementById('chainClose').addEventListener('click', () => {
-  document.getElementById('chainCard').hidden = true
-})
-
-document.getElementById('sayBtn').addEventListener('click', async () => {
-  const out = document.getElementById('sayOut')
-  const text = document.getElementById('sayText').value
-  out.innerHTML = '<p class="muted small">发送中…</p>'
+async function select(id) {
+  view.selected = id
+  renderList()
+  const row = view.rows.find((item) => item.id === id)
+  view.history = []
+  view.chain = []
   try {
-    const data = await api('/api/say', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text }),
+    const [detail, history, chain] = await Promise.all([
+      api(`/api/get?id=${encodeURIComponent(id)}`),
+      api(`/api/history?id=${encodeURIComponent(id)}`),
+      row?.topic_key
+        ? api(`/api/chain?topic=${encodeURIComponent(row.topic_key)}&scope=${encodeURIComponent(row.scope)}`)
+        : Promise.resolve({ chain: [] }),
+    ])
+    view.history = history.versions ?? []
+    view.chain = chain.chain ?? []
+    renderDetail(detail.row)
+  } catch (error) {
+    toast(error.message, true)
+  }
+}
+
+function renderDetail(row) {
+  const active = row.status === 'active'
+  $('detailMeta').innerHTML = `<code>${esc(row.id)}</code>`
+  $('detail').innerHTML = `
+    <div class="detail">
+      <div class="row">
+        <span class="badge ${row.status}">${STATUS_LABEL[row.status] ?? row.status}</span>
+        <span class="badge">${KIND_LABEL[row.kind] ?? row.kind}</span>
+        <span class="small muted">${row.scope === 'global' ? '全局' : '项目'} · 创建 ${time(row.created_at)} · 更新 ${time(row.updated_at)}</span>
+      </div>
+      <div class="field">
+        <label>内容</label>
+        <textarea id="dContent" rows="4"${active ? '' : ' disabled'}>${esc(row.content)}</textarea>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>类型</label>
+          <select id="dKind"${active ? '' : ' disabled'}>
+            ${Object.entries(KIND_LABEL).map(([value, label]) =>
+              `<option value="${value}"${row.kind === value ? ' selected' : ''}>${label}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>重要度</label>
+          <select id="dImportance"${active ? '' : ' disabled'}>
+            ${[1, 2, 3, 4, 5].map((value) =>
+              `<option${row.importance === value ? ' selected' : ''}>${value}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <span class="small muted">${row.topic_key ? `槽位 <code>${esc(row.topic_key)}</code>` : '无槽位（普通事实，靠内容去重）'}</span>
+      </div>
+      <div class="row">
+        ${active ? '<button id="dSave">保存修改</button><button class="danger" id="dDelete">删除</button>' : ''}
+        ${row.status === 'deleted' ? '<button id="dRestore">恢复</button>' : ''}
+      </div>
+      ${view.chain.length > 1 ? `
+        <div class="field"><label>版本链（旧 → 新）</label>
+          ${view.chain.map((item) => `
+            <div class="hist-row">
+              <div class="${item.status === 'active' ? '' : 'chain-old'}">${esc(item.content)}</div>
+              <div class="t">${time(item.created_at)} · ${STATUS_LABEL[item.status] ?? item.status}</div>
+            </div>`).join('')}
+        </div>` : ''}
+      <div class="field"><label>变更历史（${view.history.length} 条）</label>
+        <div class="history">
+          ${view.history.length === 0 ? '<span class="small muted">没有版本记录</span>' : view.history.map((item) => `
+            <div class="hist-row">
+              <div>${OP_LABEL[item.op] ?? item.op} <span class="muted">by ${esc(item.actor ?? '—')}</span></div>
+              <div class="t">${time(item.created_at)}${item.reason ? ` · ${esc(item.reason)}` : ''}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>`
+
+  if (active) {
+    $('dSave').addEventListener('click', async () => {
+      try {
+        await api('/api/update', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            id: row.id,
+            content: $('dContent').value,
+            kind: $('dKind').value,
+            importance: Number($('dImportance').value),
+          }),
+        })
+        toast('已保存')
+        await refresh()
+        await select(row.id)
+      } catch (error) { toast(error.message, true) }
     })
-    const r = data.result
-    const head = `<div class="meta small muted">抽取出：${KIND_LABEL[data.extracted.kind] ?? data.extracted.kind}` +
-      `${data.extracted.topicKey ? ` · 槽位 <code>${esc(data.extracted.topicKey)}</code>` : ' · 无槽位'}` +
-      ` · ${esc(data.extracted.basis)}</div>`
-    let body
-    if (r.status === 'superseded' && data.replaced) {
-      body = `<div><span class="badge superseded">替换旧值</span>
-        <div class="small" style="margin-top:6px"><span class="chain-old">${esc(data.replaced.content)}</span></div>
-        <div>→ ${esc(data.extracted.content)}</div></div>`
-    } else if (r.status === 'added') {
-      body = `<div><span class="badge added">新增</span> ${esc(data.extracted.content)}</div>`
-    } else if (r.status === 'duplicate') {
-      body = `<div><span class="badge duplicate">已存在</span> 和现有记忆重复，没有写入。</div>`
-    } else {
-      body = `<div><span class="badge tombstoned">已删除过</span> 这条槽位曾被你删除，没有自动复活。</div>`
-    }
-    out.innerHTML = head + body + `<div class="small muted">本轮注入（${data.inject.chars} 字符）</div>` + injectHtml(data.inject)
-    await refresh()
-  } catch (error) {
-    out.innerHTML = `<p class="muted small">出错了：${esc(error.message)}</p>`
+    $('dDelete').addEventListener('click', async () => {
+      if (!confirm('删除这条记忆？删除是软删除，之后可以在「已删除」里恢复。')) return
+      try {
+        await api('/api/forget', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id: row.id }),
+        })
+        toast('已删除（可恢复）')
+        view.selected = null
+        $('detail').innerHTML = '<div class="empty">从左边选一条记忆</div>'
+        await refresh()
+      } catch (error) { toast(error.message, true) }
+    })
   }
-})
-
-document.getElementById('askBtn').addEventListener('click', async () => {
-  const out = document.getElementById('askOut')
-  const question = document.getElementById('askText').value
-  out.innerHTML = '<p class="muted small">查询中…</p>'
-  try {
-    const { inject } = await api(`/api/inject?q=${encodeURIComponent(question)}`)
-    out.innerHTML = `<div class="small muted">会话 B 只说了这一句，引擎给它的全部上下文共 ${inject.chars} 字符：</div>` + injectHtml(inject)
-  } catch (error) {
-    out.innerHTML = `<p class="muted small">出错了：${esc(error.message)}</p>`
+  if (row.status === 'deleted') {
+    $('dRestore').addEventListener('click', async () => {
+      try {
+        await api('/api/restore', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id: row.id }),
+        })
+        toast('已恢复')
+        await refresh()
+        await select(row.id)
+      } catch (error) { toast(error.message, true) }
+    })
   }
-})
+}
 
-document.getElementById('reset').addEventListener('click', async () => {  await api('/api/reset', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
-  document.getElementById('sayOut').innerHTML = ''
-  document.getElementById('askOut').innerHTML = ''
-  document.getElementById('chainCard').hidden = true
-  await refresh()
-})
-
-for (const link of document.querySelectorAll('a.q')) {
-  link.addEventListener('click', (event) => {
-    event.preventDefault()
-    document.getElementById('askText').value = link.textContent.trim()
-    document.getElementById('askBtn').click()
+function segHandler(elementId, key) {
+  const seg = $(elementId)
+  seg.addEventListener('click', (event) => {
+    const button = event.target.closest('button')
+    if (!button) return
+    for (const item of seg.querySelectorAll('button')) item.classList.toggle('on', item === button)
+    filters[key] = button.dataset.v
+    loadList().catch((error) => toast(error.message, true))
   })
 }
 
-refresh()
+$('search').addEventListener('input', (event) => {
+  filters.q = event.target.value
+  renderList()
+})
+$('kind').addEventListener('change', (event) => {
+  filters.kind = event.target.value
+  renderList()
+})
+segHandler('scopeSeg', 'scope')
+segHandler('statusSeg', 'status')
+
+$('btnInject').addEventListener('click', async () => {
+  const question = $('q').value.trim()
+  const out = $('injectOut')
+  out.innerHTML = '<p class="small muted">查询中…</p>'
+  try {
+    const { inject } = await api(`/api/inject?q=${encodeURIComponent(question)}`)
+    const block = (title, part) => `
+      <div class="blk">
+        <div class="blk-head"><span>${title}</span><span>${part?.chars ?? 0} 字符</span></div>
+        <pre class="${part?.text ? '' : 'empty'}">${part?.text ? esc(part.text) : '（这一块为空）'}</pre>
+      </div>`
+    out.innerHTML = `<p class="small muted" style="margin:8px 0 0">合计 ${inject.chars} 字符</p>`
+      + block('身份块（全局，会话内冻结）', inject.identity)
+      + block('项目块（每轮重建）', inject.project)
+      + block('检索块（按问题，已去重）', inject.retrieval)
+  } catch (error) {
+    out.innerHTML = `<p class="small muted">出错：${esc(error.message)}</p>`
+  }
+})
+$('q').addEventListener('keydown', (event) => { if (event.key === 'Enter') $('btnInject').click() })
+
+$('btnAdd').addEventListener('click', () => $('addDialog').showModal())
+$('addCancel').addEventListener('click', () => $('addDialog').close())
+$('addSave').addEventListener('click', async () => {
+  const content = $('fContent').value.trim()
+  if (content.length < 4) { toast('内容至少 4 个字', true); return }
+  try {
+    const { result } = await api('/api/save', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        scope: $('fScope').value,
+        kind: $('fKind').value,
+        topicKey: $('fTopic').value.trim() || undefined,
+        importance: Number($('fImportance').value),
+        content,
+      }),
+    })
+    $('addDialog').close()
+    $('fContent').value = ''
+    $('fTopic').value = ''
+    toast(result.status === 'superseded' ? `已替换旧值（新 id ${result.id}）`
+      : result.status === 'duplicate' ? '内容重复，未写入'
+      : result.status === 'tombstoned' ? '这个槽位曾删除过，未自动复活'
+      : '已新增')
+    await refresh()
+  } catch (error) { toast(error.message, true) }
+})
+
+async function refresh() {
+  await Promise.all([loadCounts(), loadList()])
+}
+
+async function boot() {
+  try {
+    const health = await api('/api/health')
+    $('dbPath').textContent = health.file
+  } catch { /* 健康检查失败时仍然尝试列表 */ }
+  await refresh()
+}
+boot()
 </script>
 </body>
 </html>

@@ -33,14 +33,21 @@ DSH 侧栏面板 ←──│ plugin/index.js + client.js│──────�
 
 ## 三种运行形态
 
-**1. 独立网页演示（不需要 DSH，也不需要模型）**
+**1. 记忆面板（不需要 DSH，也不需要模型）**
 
 ```bash
 cd server && npm start          # 或 node server/http.js
 # → http://127.0.0.1:7788/
 ```
 
-首次启动会在 `server/demo.db` 里写入 8 条演示记忆（身份 2 条、项目 6 条）。页面上的「抽取」是演示用的规则抽取器（命中 `把 A 从 B 换成 C` 这类句式），真实部署里这一步由模型的抽取提示词完成；面板上直接写了这句说明，不要假装它是模型。
+两种库，用 `AGENTMEMORY_DB` 切换：
+
+| 库 | 启动方式 | 内容 |
+|---|---|---|
+| 演示库（默认） | 直接启动 | `server/demo.db`，首次启动 seed 8 条湖仓相关记忆 |
+| 真实库 | `$env:AGENTMEMORY_DB="$env:USERPROFILE\.dsh\agentmemory\memory.db"` | 与 DSH 插件、MCP 共用同一份记忆 |
+
+面板功能：搜索与筛选（范围 / 状态 / 类型）、详情、编辑内容与重要度、软删除与恢复、版本链、变更历史、按问题预览三段注入、导出 Markdown。`POST /api/reset` 只在 `demo.db` 上可用，指向真实库时返回 403。
 
 **2. MCP server（Claude Code / Cursor / Codex / Gemini CLI…）**
 
@@ -57,18 +64,13 @@ curl -X POST localhost:7788/mcp -d '{"jsonrpc":"2.0","id":1,"method":"tools/list
 
 ---
 
-## 演示脚本（3 分钟）
+## 面板怎么用（答辩 3 分钟）
 
-1. 打开演示页。左栏是**两个互不相干的会话**，右栏是记忆库（8 条）。
-2. 点会话 A 的「发送」：句子里把数据存储从 PostgreSQL 换成了 ClickHouse。
-   - 页面显示「抽取出：决策 · 槽位 `tech.datastore`」；
-   - 结果标记是**替换**，不是新增：旧值划掉、新值生效；
-   - 右栏那一组的条目已经变成 ClickHouse，旧条目进了版本链（点「项目」里任意条目可展开）。
-3. 在会话 B 输入「我们的数据存储用什么？」点「提问」：会话 B 从没参与过上面的对话，但它的注入块里第一行就是 ClickHouse。**记忆存在会话之外**，这就是跨会话。
-4. 再问「行情数据是怎么模拟的？」：这一条重要度只有 2，进不了常驻的项目块，只在**检索块**里出现——三段注入的分工当场可见。
-5. 点「重置演示」可以回到初始状态，重复讲。
-
-讲的顺序建议：先讲「替换」再讲「跨会话」，最后讲「预算怎么切」。评审最容易记住的是第 2 步那张「旧值划掉、新值生效」。
+1. 打开面板，顶部显示「生效 N · 全局 x / 项目 y」，左列按重要度排序。
+2. 点一条带槽位的记忆（如 `tech.datastore`）：右侧出现内容、版本链和变更历史。同一槽位被替换过几次，一眼可见。
+3. 「新建记忆」写一条同槽位的新值（例如把 ClickHouse 换成 Doris）：旧值变「已替换」，新值「生效」，版本链多一条。**这就是本项目与普通记忆插件的区别。**
+4. 右下「注入预览」输入「我们的数据存储用什么？」：三段各多少字符当场可见，预算分工不用口头解释。
+5. 删一条再切到「已删除」恢复：证明是软删除，变更历史里出现 delete / restore。
 
 ---
 
@@ -105,9 +107,9 @@ curl -X POST localhost:7788/mcp -d '{"jsonrpc":"2.0","id":1,"method":"tools/list
 ├─ PROPOSAL.md          开题报告底稿
 ├─ server/              宿主无关的引擎与两个适配器
 │  ├─ engine.js         openEngine()：注入/检索/保存/版本，零 DSH 依赖
-│  ├─ http.js           独立 HTTP 服务 + 演示 API（端口 7788）
+│  ├─ http.js           记忆面板 API + 静态页（端口 7788）
 │  └─ mcp.js            MCP stdio server（JSON-RPC 2.0）
-├─ demo/index.html      独立演示页（两个会话 + 记忆库 + 版本链）
+├─ demo/index.html      记忆面板（列表 / 详情 / 版本链 / 注入预览）
 ├─ plugin/              DSH 插件（可直接安装）
 │  ├─ index.js          Host：路由 + 注入 + 工具
 │  ├─ client.js         浏览器半：侧栏面板 + 三个 slot
@@ -139,7 +141,8 @@ curl -X POST localhost:7788/mcp -d '{"jsonrpc":"2.0","id":1,"method":"tools/list
 - 导出：Markdown（面板一键下载，含已失效历史）
 - 8 个 MCP 工具（`plugin/` 侧 7 个 + 自动注入；MCP 多一个 `memory_context`）：save / search / list / get / update / forget / history / context
 - 数据：`$DSH_HOME/agentmemory/memory.db`，schema v8（v8 加 `turn_trace`：每轮注入了什么、新增了几条）
-- 独立形态：`server/http.js` 起演示页（端口 7788，库在 `server/demo.db`）；`server/mcp.js` 暴露 8 个 MCP 工具（库默认 `~/.agentmemory/memory.db`）
+- 独立形态：`server/http.js` 起记忆面板（端口 7788）；默认读 `server/demo.db`，可用 `AGENTMEMORY_DB` 指向真实库；`server/mcp.js` 暴露 8 个 MCP 工具（库默认 `~/.agentmemory/memory.db`）
+- Trae 接入：`mcp.json` 里配 `AgentMemory`，项目级 `.trae/hooks.json` 的 `UserPromptSubmit` 负责自动注入（读）；写入仍需模型调用 `memory_save`
 - 测试：89 个插件用例（34 store + 14 capture + 13 dream + 3 export + 7 lifecycle + 6 retrieval + 5 session-text + 7 block）+ 6 个引擎用例（`node server/test/engine.test.js`）
 
 ## 已验证 / 未验证
@@ -159,8 +162,8 @@ curl -X POST localhost:7788/mcp -d '{"jsonrpc":"2.0","id":1,"method":"tools/list
 | 回合记忆栏 | ✅ `Slots.listSubTree` 见 `agentmemory-turn-tail`（order 30）；`GET /api/agentmemory/turn` 返回真实 trace |
 | 手动存入 | ✅ 按 messageId 从会话日志取正文，`POST /save` 落库；含 `password=` 的文本被拒 |
 | 自动整理闸门 | ✅ 三道门（条数/间隔/待处理建议）+ `meta` 持久化，均有单测 |
-| 独立演示页 | ✅ API 全链路（seed → 替换 → 跨会话注入 → 版本链）；⚠️ 页面视觉未人工确认（此环境没有浏览器控制） |
-| MCP server | ✅ `initialize` / `tools/list` / `save` / `context` / `search` 走通；⚠️ 还没在真实 MCP 客户端里连过 |
+| 记忆面板 | ✅ 列表 / 详情 / 编辑 / 软删 / 恢复 / 版本链 / 变更历史 / 注入预览 / 导出，浏览器实测通过 |
+| MCP server | ✅ Trae CN 实连：8 个工具、读写共享库、`initialize.instructions` 下发、密钥写入被拒（`isError`） |
 | 注入带 id | ✅ 本轮 system-reminder 每条前缀 `[m_xxxx]`；注入 352 字符（全文 393） |
 | `memory_get` | ✅ 按 id 取回全文与元数据 |
 | 过期不注入 | ✅ 标记过期后 `expired=true`（注入过滤由单测覆盖，下一轮生效） |
@@ -168,13 +171,13 @@ curl -X POST localhost:7788/mcp -d '{"jsonrpc":"2.0","id":1,"method":"tools/list
 | 立即提取 | ✅ `POST /api/agentmemory/flush` 返回 ok |
 | 按问题检索 | ✅ 「我毕设做到哪一步了」命中 2 条 142 字符；「机器学习」0 条不注入 |
 | 整理建议的模型质量 | ⚠️ 结构可用，但 `deepseek-flash` 在 6 条记忆上倾向返回 `{"ops":[]}`，需要更强模型或分组式提示词 |
-| 面板的视觉呈现 | ⚠️ 需要刷新页面人工确认（当前环境没有浏览器控制） |
-| 子代理隔离、多进程写并发、compaction 后自愈 | ⬜ 未验证 |
+| 面板的视觉呈现 | ✅ 网页面板已浏览器实测（列表 / 详情 / 版本链 / 注入预览）；DSH 侧栏面板仍待人工过一遍 |
+| 子代理隔离、compaction 后自愈 | ⬜ 未验证；多进程并发写 ✅ 已验证（2×2000 条零 `SQLITE_BUSY`，见 `eval/concurrency.mjs`） |
 
 ## 下一步
 
-1. 在真实 MCP 客户端（Claude Code / Cursor）里连一次 `server/mcp.js`，确认 `memory_context` 的调用时机与 token 成本 —— 目前只验证到协议层（本机没装这些客户端）。
+1. 在第二个 MCP 客户端（Claude Code 或 Cursor）里连一次，确认 `memory_context` 的调用时机与 token 成本 —— Trae CN 已实连。
 2. 把 `eval/report.md` 的指标写进论文「实验」一节：A 组替换正确率 100%、旧值残留 0；B 组跨会话召回 85%（17/20）；平均注入 95 字符。
-3. 页面视觉人工过一遍（演示页 + DSH 面板），把截图放进论文。
+3. DSH 侧栏面板视觉人工过一遍，截图放论文（网页面板已完成）。
 4. 概览生成并入后台整理批处理，避免两处各调一次模型。
-5. `git init` + 首次提交（`.gitignore` 已就绪，`*.db` / `*.db-wal` 已忽略）。
+5. 开源前做路径脱敏：HANDOFF.md、docs/mcp-clients.md 里的本机绝对路径仍在。
