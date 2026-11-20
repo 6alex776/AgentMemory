@@ -13,7 +13,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { openStore, KIND_LABELS } from './lib/store.js'
-import { extractSignals, parseItems, roughlyKnown, shouldFlush } from './lib/capture.js'
+import { extractSignals, looksSecret, parseItems, roughlyKnown, shouldFlush } from './lib/capture.js'
 import { renderRetrievalBlock } from './lib/retrieval.js'
 import { buildMergeProposals, shouldAutoDream } from './lib/dream.js'
 import { renderMarkdown } from './lib/export.js'
@@ -365,8 +365,6 @@ function buildExtractPrompt(text) {
   ].join('\n')
 }
 
-/** Reject obvious credentials before anything reaches the store. */
-const SECRET_PATTERN = /(sk-[A-Za-z0-9]{12,}|AKIA[0-9A-Z]{12,}|-----BEGIN [A-Z ]+PRIVATE KEY-----|password\s*[:=]\s*\S+)/i
 
 /** One extraction pass: model proposes, store dedupes and slots the result. */
 async function extractFacts(ctx, store, options, text, sessionId) {
@@ -389,7 +387,7 @@ async function extractFacts(ctx, store, options, text, sessionId) {
     if (content.length < 4 || content.length > 200) continue
     if (confidence < 0.55) continue
     if (/[?？]$/.test(content)) continue
-    if (SECRET_PATTERN.test(content)) continue
+    if (looksSecret(content)) continue
     try {
       const result = store.add({
         scope: 'global',
@@ -413,6 +411,11 @@ export function apply(ctx, config = {}) {
   const options = {
     dbPath: typeof config.dbPath === 'string' && config.dbPath.trim().length > 0 ? config.dbPath.trim() : undefined,
     maxInjectChars: Number(config.maxInjectChars) >= 200 ? Number(config.maxInjectChars) : 1200,
+    // Identity block budget. Separate from maxInjectChars (the legacy single-block
+    // ceiling) so the two blocks can be tuned independently.
+    identityMaxChars: Number(config.identityMaxChars) >= 100
+      ? Number(config.identityMaxChars)
+      : (config.maxInjectChars !== undefined ? Math.min(1200, Number(config.maxInjectChars) || 400) : 400),
     projectBlock: config.projectBlock !== false,
     projectMaxChars: Number(config.projectMaxChars) >= 200 ? Number(config.projectMaxChars) : 800,
     projectMinImportance: Number(config.projectMinImportance) >= 1
@@ -916,7 +919,7 @@ export function apply(ctx, config = {}) {
           if (content.length > 1000) content = `${content.slice(0, 1000)}…`
           // Nothing reaches the store if it looks like a credential, no matter
           // whether the model proposed it or the user clicked 存入记忆.
-          if (SECRET_PATTERN.test(content)) {
+          if (looksSecret(content)) {
             sendJson(res, 200, { ok: false, error: '内容里像是密钥或密码，已拒绝保存' })
             return
           }
@@ -1033,7 +1036,7 @@ export function apply(ctx, config = {}) {
           }
           const cwd = header?.cwd
           const current = getStore()
-          const block = renderCoreBlock(current, cwd, options.maxInjectChars, options.includeIds)
+          const block = renderCoreBlock(current, cwd, options.identityMaxChars, options.includeIds)
           if (options.coreSnapshot === 'session' && agentId.length > 0) {
             if (coreCache.size > 64) coreCache.delete(coreCache.keys().next().value)
             coreCache.set(agentId, block)
@@ -1395,6 +1398,11 @@ export function apply(ctx, config = {}) {
           if (added > 0) ctx.logger?.info?.(`agentmemory: captured ${added} memory item(s), ${reason}`)
         })
         .catch((error) => {
+          // Put the text back: a failed extraction (model error, timeout) must
+          // not silently swallow what the user said. The next turn retries.
+          state.text = state.text.length > 0 ? `${text}\n${state.text}` : text
+          syncPending()
+          captureStats.reason = '抽取失败，内容已放回缓冲'
           ctx.logger?.warn?.(`agentmemory: capture failed: ${error instanceof Error ? error.message : String(error)}`)
         })
         .finally(() => {

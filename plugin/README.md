@@ -45,10 +45,11 @@ DSH 的跨会话长期记忆插件：侧栏一个「记忆」页面 + 每轮自�
       name: 'dsh-agentmemory'
       config:
         dbPath: 'D:/backup/agentmemory.db'   # 默认 $DSH_HOME/agentmemory/memory.db
-        maxInjectChars: 1200                  # 身份块（用户背景/偏好）字符上限
+        identityMaxChars: 400                 # 【长期记忆·用户】字符上限
         projectBlock: true                    # 是否注入【长期记忆·本项目】这一段
         projectMaxChars: 800                  # 项目块字符上限
         projectMinImportance: 3               # 项目块只收重要度 ≥ 此值的条目
+        # maxInjectChars: 1200                # 旧版单一上限；仍可写，会被当作 identityMaxChars 的兜底
         coreSnapshot: session                # session（默认，会话内冻结）| live（每次重算）
         allowRemote: false                    # 面板路由默认只接受本机回环
         overviewProvider: deepseek-account    # 概览/抽取用哪个模型；留空用默认模型

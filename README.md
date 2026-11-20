@@ -24,7 +24,7 @@ DSH 侧栏面板 ←──│ plugin/index.js + client.js│──────�
 
 - 侧栏出现「记忆」入口（图标 + 标签），点开后是按「用户背景 / 偏好 / 项目」分组的记忆页。
 - 每轮对话会自动注入一段「长期记忆」，子代理会话不注入。
-- 模型可调用 `memory_save` / `memory_search` / `memory_list` / `memory_update` / `memory_forget` / `memory_history`。
+- 模型可调用 `memory_save` / `memory_search` / `memory_list` / `memory_get` / `memory_update` / `memory_forget` / `memory_history`（7 个）。
 - 数据在 `$DSH_HOME/agentmemory/memory.db`（单文件 SQLite，WAL）。
 
 改 `plugin/` 下的 Host 代码后，用插件管理开关一次（或重启）让新模块生效；只改 `client.js` 则刷新页面即可。
@@ -49,7 +49,7 @@ node server/mcp.js              # stdio，JSON-RPC 2.0
 curl -X POST localhost:7788/mcp -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'   # 或 HTTP
 ```
 
-数据库默认 `~/.agentmemory/memory.db`，可用 `AGENTMEMORY_DB` 覆盖；项目归属用 `AGENTMEMORY_CWD` 或每次调用传 `cwd`。暴露 6 个工具：`memory_context` / `memory_save` / `memory_search` / `memory_list` / `memory_history` / `memory_forget`，定义在 [server/tools.js](server/tools.js)，stdio 与 HTTP 共用一份。
+数据库默认 `~/.agentmemory/memory.db`，可用 `AGENTMEMORY_DB` 覆盖；项目归属用 `AGENTMEMORY_CWD` 或每次调用传 `cwd`。暴露 8 个工具：`memory_context` / `memory_save` / `memory_search` / `memory_list` / `memory_get` / `memory_update` / `memory_history` / `memory_forget`，定义在 [server/tools.js](server/tools.js)，stdio 与 HTTP 共用一份。比插件多一个 `memory_context`：DSH 插件自己会注入上下文，MCP 客户端不会，所以得给它一个「现在该注入什么」的入口。
 
 各客户端的具体配置（含「必须用绝对路径指向 Node ≥22.5」这个坑）见 [docs/mcp-clients.md](./docs/mcp-clients.md)。
 
@@ -137,16 +137,16 @@ curl -X POST localhost:7788/mcp -d '{"jsonrpc":"2.0","id":1,"method":"tools/list
 - 时效：`expires_at` 过期不注入并标「已过期」；超 90 天未确认标「待复核」，可续期；记录使用次数与最近使用时间
 - 会话控制：`/memory on|off|status`（存库，重启有效）
 - 导出：Markdown（面板一键下载，含已失效历史）
-- 7 个记忆工具：save / search / list / get / update / forget / history
+- 8 个 MCP 工具（`plugin/` 侧 7 个 + 自动注入；MCP 多一个 `memory_context`）：save / search / list / get / update / forget / history / context
 - 数据：`$DSH_HOME/agentmemory/memory.db`，schema v8（v8 加 `turn_trace`：每轮注入了什么、新增了几条）
-- 独立形态：`server/http.js` 起演示页（端口 7788，库在 `server/demo.db`）；`server/mcp.js` 暴露 6 个 MCP 工具（库默认 `~/.agentmemory/memory.db`）
+- 独立形态：`server/http.js` 起演示页（端口 7788，库在 `server/demo.db`）；`server/mcp.js` 暴露 8 个 MCP 工具（库默认 `~/.agentmemory/memory.db`）
 - 测试：89 个插件用例（34 store + 14 capture + 13 dream + 3 export + 7 lifecycle + 6 retrieval + 5 session-text + 7 block）+ 6 个引擎用例（`node server/test/engine.test.js`）
 
 ## 已验证 / 未验证
 
 | 项 | 状态 |
 |---|---|
-| 插件安装与激活、Host 侧工具注册 | ✅ 已验证（Inspect 可见 7 个工具） |
+| 插件安装与激活、Host 侧工具注册 | ✅ 已验证（Inspect 可见 7 个工具；MCP 侧另加 `memory_context` 共 8 个） |
 | `agentmemory:core` 注入 | ✅ 上次对话的 system-reminder 里就是注入结果 |
 | 侧栏入口 + 主面板 slot 注册 | ✅ Inspect 显示 `sidebar.panellist` 有 `agentmemory`、`main` 有 key `agentmemory` |
 | 增删改查 / 恢复 / 版本 / 中文检索（HTTP 层） | ✅ 已用真实请求跑通 |
@@ -173,7 +173,8 @@ curl -X POST localhost:7788/mcp -d '{"jsonrpc":"2.0","id":1,"method":"tools/list
 
 ## 下一步
 
-1. 在真实 MCP 客户端（Claude Code / Cursor）里连一次 `server/mcp.js`，确认 `memory_context` 的调用时机与 token 成本。
-2. 评测脚本：自建中文语料（20 组「旧值→新值」+ 20 组跨会话指代），量三个数——替换正确率、跨会话召回、注入字符数；论文「实验」一节要用。
+1. 在真实 MCP 客户端（Claude Code / Cursor）里连一次 `server/mcp.js`，确认 `memory_context` 的调用时机与 token 成本 —— 目前只验证到协议层（本机没装这些客户端）。
+2. 把 `eval/report.md` 的指标写进论文「实验」一节：A 组替换正确率 100%、旧值残留 0；B 组跨会话召回 85%（17/20）；平均注入 95 字符。
 3. 页面视觉人工过一遍（演示页 + DSH 面板），把截图放进论文。
 4. 概览生成并入后台整理批处理，避免两处各调一次模型。
+5. `git init` + 首次提交（`.gitignore` 已就绪，`*.db` / `*.db-wal` 已忽略）。

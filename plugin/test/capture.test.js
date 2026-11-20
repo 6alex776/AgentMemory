@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { extractSignals, parseItems, roughlyKnown, shouldFlush, similarity, containment } from '../lib/capture.js'
+import { extractSignals, looksSecret, parseItems, roughlyKnown, shouldFlush, similarity, containment } from '../lib/capture.js'
 
 test('extractSignals keeps stated preferences and facts', () => {
   const text = '我是计算机专业本科生。我比较喜欢直接的回答。以后都用 TypeScript 写示例。'
@@ -84,4 +84,13 @@ test('the turn-boundary trigger ignores blank text and has a default floor', () 
   assert.equal(shouldFlush(undefined, 300), false)
   assert.equal(shouldFlush('x'.repeat(299)), false)
   assert.equal(shouldFlush('x'.repeat(300)), true)
+})
+
+test('credentials are rejected instead of redacted', () => {
+  assert.equal(looksSecret('我的 key 是 sk-abcdefghijklmnop'), true)
+  assert.equal(looksSecret('AWS 用 AKIAIOSFODNN7EXAMPLE 这个'), true)
+  assert.equal(looksSecret('password: hunter2'), true)
+  assert.equal(looksSecret('数据库密码设成 password = abc123'), true)
+  assert.equal(looksSecret('存量密码已经迁移到密钥管理服务'), false)
+  assert.equal(looksSecret('我们决定用 ClickHouse 替换 PostgreSQL'), false)
 })

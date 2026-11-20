@@ -15,6 +15,18 @@ import { toSearchText } from './bigram.js'
 export const SIGNAL_PATTERN = /(记住|记一下|帮我记|请记|以后都|以后不|每次都|一律|总是|从不|我喜欢|我不喜欢|我讨厌|我习惯|我是|我在做|我负责|我决定|我们决定|计划|打算|目标|改成|改用|选用|换成|我一般|我的[^，。]{0,8}是)/
 
 /**
+ * Obvious credentials. A memory is a long-lived, always-injected surface, so a
+ * key that lands here leaks on every subsequent turn — reject instead of redacting,
+ * because a redacted secret is still a broken memory.
+ */
+export const SECRET_PATTERN = /(sk-[A-Za-z0-9]{12,}|AKIA[0-9A-Z]{12,}|-----BEGIN [A-Z ]+PRIVATE KEY-----|password\s*[:=]\s*\S+)/i
+
+/** @param {string} text */
+export function looksSecret(text) {
+  return SECRET_PATTERN.test(String(text ?? ''))
+}
+
+/**
  * Keep only the sentences that carry a memory signal. Questions are dropped:
  * asking about Python does not mean you use Python.
  * @param {string} text

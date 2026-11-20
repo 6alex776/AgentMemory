@@ -76,6 +76,31 @@ export const TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'memory_get',
+    description: '按 id 取回一条记忆的全文与元数据（含状态、版本链指针）。',
+    inputSchema: {
+      type: 'object',
+      required: ['id'],
+      properties: { id: { type: 'string' } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'memory_update',
+    description: '原地修改一条记忆的内容、类型或重要度（不产生新版本，改内容请优先用同一 topicKey 重新 save）。',
+    inputSchema: {
+      type: 'object',
+      required: ['id'],
+      properties: {
+        id: { type: 'string' },
+        content: { type: 'string' },
+        kind: { type: 'string', enum: ['profile', 'preference', 'fact', 'decision', 'lesson', 'episode'] },
+        importance: { type: 'number', minimum: 1, maximum: 5 },
+      },
+      additionalProperties: false,
+    },
+  },
 ]
 
 const text = (value) => ({
@@ -126,6 +151,22 @@ export function callTool(engine, name, args = {}, defaultCwd = process.cwd()) {
       return text(engine.list().map((row) => `${row.id} [${row.scope}/${row.kind}] ${row.content}`))
     case 'memory_history':
       return text(engine.history(args.id).map((row) => `${row.op} @ ${row.created_at}`))
+    case 'memory_get': {
+      const row = engine.get(args.id)
+      return row === undefined
+        ? { isError: true, ...text('没有这条记忆') }
+        : text(row)
+    }
+    case 'memory_update': {
+      const row = engine.get(args.id)
+      if (row === undefined) return { isError: true, ...text('没有这条记忆') }
+      const patch = {}
+      if (typeof args.content === 'string' && args.content.trim().length >= 4) patch.content = args.content.trim()
+      if (typeof args.kind === 'string') patch.kind = args.kind
+      if (Number.isFinite(args.importance)) patch.importance = Math.min(5, Math.max(1, Number(args.importance)))
+      if (Object.keys(patch).length === 0) return { isError: true, ...text('没有要改的字段') }
+      return text({ updated: engine.update(args.id, patch) })
+    }
     case 'memory_forget':
       return text({ forgotten: engine.forget(args.id) })
     default:

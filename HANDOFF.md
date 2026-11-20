@@ -76,9 +76,11 @@ AgentMemory/
 └── docs/
     ├── mcp-clients.md         在 Claude Code / Cursor / Codex / Gemini CLI / Continue / Windsurf / Zed 的配置
     ├── schema-v1.sql          建表 SQL（历史参考，实际以 store.js 内 v8 为准）
-    ├── plugin-ui-analysis.md  面板 UX 参考（ChatGPT 记忆页截图分析）
-    └── plugin-module-map.md   DSH 插件模块地图
+    ├── plugin-ui-analysis.md  对第三方插件 dsh-plugin-memory@0.20.0 解包产物的只读审阅笔记（面板 UX 参考）
+    └── plugin-module-map.md   同上，模块地图（行号口径为 0.20.0 的 lib/client.js 与 lib/host/*）
 ```
+
+> `docs/plugin-ui-analysis.md`、`docs/plugin-module-map.md` 的分析对象是 npm 包 `dsh-plugin-memory@0.20.0`（第三方实现，非本仓库代码）；两篇开头都写了审阅对象与方法。**它们不含该包的源代码，只含结论与引用行号**，因此没有复制许可证义务；但论文/答辩引用时应说明出处（"参考实现：dsh-plugin-memory 0.20.0"）。
 
 `plugin/lib/*.js` 对 DSH API 的引用数为 **0**，这是「引擎可移植」的证据（`grep -rn "ctx\.\|cordis" plugin/lib/` 应为空）。
 
@@ -113,7 +115,22 @@ AgentMemory/
 
 八张表：`meta`（schema_version 等）、`project`、`memory`、`memory_version`（每次写的 before/after 快照）、`dream_proposal`（整合建议）、`session_flag`（`/memory off`）、`turn_trace`（每轮注入了哪些 id，供回合栏展示）、`memory_summary`（概览缓存 + `source_rev` 失效键）。
 
-迁移机制：`store.js` 内 `SCHEMA_VERSION` 常量 + 顺序迁移，启动时比对 `meta.schema_version` 并逐版升级。v8 = 加 `turn_trace`。
+迁移机制：`store.js` 内 `SCHEMA_VERSION` 常量 + 顺序迁移，启动时比对 `meta.schema_version` 并逐版升级。
+
+逐版变更（`plugin/lib/store.js:137-146` 的注释即权威）：
+
+| 版本 | 加了什么 |
+|---|---|
+| v1 | `memory` / `memory_version` / `project` / `memory_fts`（含中文二元组影子列） |
+| v2 | `memory_summary`（概览缓存 + `source_rev` 失效键） |
+| v3 | `memory.abstract`（≤40 字短摘要，注入用；已有行会回填） |
+| v4 | `dream_proposal`（整理建议卡） |
+| v5 | `memory.use_count` / `memory.last_used_at` |
+| v6 | `session_flag`（`/memory off`） |
+| v7 | `memory.expires_at` / `memory.last_verified_at`（时效） |
+| v8 | `turn_trace`（每轮注入了哪些 id、检索字符数、新增条数） |
+
+`migrate()` 是**幂等增量**：只用 `hasColumn()` + `ALTER TABLE` 补列、必要时 `UPDATE` 回填，不重建表；若库里版本高于代码里的 `SCHEMA_VERSION`，直接抛错拒绝降级（不会静默丢数据）。`docs/schema-v1.sql` 仅是 v1 的历史快照，不要拿它当现状。
 
 ---
 
@@ -146,16 +163,42 @@ engine.store                            // 逃生口：需要 store 细节时直
 
 ### 5.4 MCP（`server/tools.js`，stdio 与 HTTP 共用）
 
-6 个工具：`memory_context`、`memory_save`、`memory_search`、`memory_list`、`memory_history`、`memory_forget`。协议版本 `2025-06-18`。逐客户端配置见 `docs/mcp-clients.md`。
+8 个工具：`memory_context`、`memory_save`、`memory_search`、`memory_list`、`memory_get`、`memory_update`、`memory_history`、`memory_forget`。协议版本 `2025-06-18`。逐客户端配置见 `docs/mcp-clients.md`。
+
+插件侧是 7 个（没有 `memory_context`——DSH 自己会注入；MCP 客户端不会，所以多这一个入口）。两边实现各走各的：插件直连 `lib/store.js`，MCP 走 `server/engine.js`，同名工具语义一致（同一套 `topicKey` 槽位规则）。
 
 ### 5.5 DSH 宿主接入面（已实测，别凭记忆改）
 
 - **注入**：`ctx.systemPrompt.context({ name, order, text })`，三个块：`agentmemory:core`（-150）、`agentmemory:project`（-140）、检索块走 `agent/pre-step` 尾部。`context` 是 durable user-role 快照，宿主每轮整块重发。
 - **面板**：`ctx.slots.register` 到侧栏；四个 slot：`conversation.chat.assistant-actions`（书签「存入记忆」，order 30）、`conversation.chat.turnTail`（回合记忆栏，order 30）、侧栏面板、设置项。
-- **工具**：`memory_*` 六个，与 MCP 工具同名但实现各走各的（插件走 store 直连）。
+- **工具**：`memory_*` 七个（save / search / list / get / update / forget / history），与 MCP 工具同名；插件直连 store，MCP 走 engine。插件没有 `memory_context`（宿主自己注入）。
 - **命令**：`/memory`（面板、`on|off`、`export` 等子命令）。
 - **事件**：`turn/end`（写 `turn_trace` + 触发抽取 + 触发自动整理）、`user/message`（补回合问题）、`agent/disposed`（兜底落盘）。
 - **`Agent.id` 的类型就是 `SessionId`**，所以 `agentId`、`session.id`、客户端 `sessionId` 是同一个值（这一点曾改错一版）。
+
+### 5.6 门控常量一览（改阈值前先看这里，别散落着改）
+
+插件侧集中在 `plugin/index.js:413-450` 的 `options`，全部可被 profile 的 `config` 覆盖：
+
+| 键 | 默认 | 作用 |
+|---|---|---|
+| `identityMaxChars` | 400 | 【长期记忆·用户】字符预算（旧键 `maxInjectChars` 仅作兜底） |
+| `projectMaxChars` | 800 | 【长期记忆·本项目】字符预算 |
+| `projectMinImportance` | 3 | 项目块只收重要度 ≥ 此值（1–5） |
+| `retrievalMaxChars` / `retrievalLimit` | 600 / 4 | 检索块预算与条数 |
+| `captureMinChars` | 60 | 缓冲里至少这么多字才「值得」抽取 |
+| `captureTurnChars` | 300 | 回合结束、缓冲达到这么多字就抽一次 |
+| `captureIdleMinutes` | 8 | 兜底：空闲多久后抽（可被 `AGENTMEMORY_CAPTURE_IDLE_MINUTES` 覆盖） |
+| `mergeSimilarity` | 0.55 | 整理时判「同一条」 |
+| `staleDays` | 90 | 多久没确认标「待复核」（0 关闭） |
+| `dreamIntervalDays` / `dreamMinMemories` | 7 / 8 | 后台整理的两道量/时门 |
+
+写死在库层的：`plugin/lib/block.js:43` 行预算默认 800；`plugin/lib/retrieval.js` 默认 600 字符、`similarity ≥ 0.85` 视为重复；`plugin/lib/store.js` `makeAbstract` 40 字、检索候选取 `limit*4`、覆盖率门 `minHits = max(1, floor(tokens*0.15))`、LIKE 兜底探测 `probeTokens(...,3)`；`plugin/lib/dream.js:16` containment 0.85。内存上限：`lastInjected` 128 条、`coreCache` 64、`question` 截断 200、单条消息正文 4000。
+
+两个「行为」也在这里钉一下：
+
+- **检索去重**（`plugin/lib/retrieval.js:36-38`）：`coreIds.has(row.id)` 跳过 + `similarity(coreText, content) >= 0.85` 跳过。**不是**消息 digest，也不查 `turn_trace`；`turn_trace` 只用于回合栏展示。
+- **抽取失败**：`flush()` 先把缓冲置空再调模型；模型报错/超时的 `.catch` 会把这段文字拼回缓冲、`syncPending()` 并写 `captureStats.reason = '抽取失败，内容已放回缓冲'`，下一轮再抽（没有独立重试队列）。密钥命中则是**整条拒绝**（`looksSecret`，抽取循环 `continue` / `POST /save` 返回 400），不做脱敏。
 
 ---
 
@@ -198,7 +241,16 @@ cd ..; node eval/run.js
 3. **评测规模小**（40 条、自建语料）。够证明机制，不够宣称通用性能。下一步可以扩到 100+ 条，并加一组「长对话（50 轮后仍能召回早期事实）」。
 4. **自动抽取依赖模型**，抽取提示词的召回/精度没有量化。抽取失败会在面板状态行显示原因，但没有重试队列。
 5. **SSE 传输没实现**（MCP 里 Streamable HTTP 已够用；老客户端可能要 SSE）。
-6. **并发写未验证**：插件与 MCP 共用一个库时没有锁策略（SQLite 默认 busy timeout）。
+6. **并发写未验证**：插件与 MCP 共用一个库时没有锁策略（SQLite 默认 busy timeout）。事实：`plugin/lib/store.js:16-19` 设 `journal_mode=WAL`、`synchronous=NORMAL`、`busy_timeout=5000`、`foreign_keys=ON`；每个进程持有一份长连接（插件在 `apply` 内 `getStore()` 单例，MCP 进程启动即 open，直到进程退出）。跨进程写入、以及 WAL checkpoint 由谁触发，都还没压测过。
+
+**这项怎么验证**（三项未验证项的测法，不要只写「未验证」）：
+
+| 项 | 测法 |
+|---|---|
+| 多进程并发写 | 起 `server/mcp.js`（或用 `node -e` 起一个持锁脚本）与插件同时写同一个库，各写 500 条不同 `topicKey`，断言零 `SQLITE_BUSY`、总量 = 1000、无一条 `tombstoned` 误标 |
+| compaction 后自愈 | 在 GUI 里把会话跑到自动压缩，压缩后立刻问一条只存在于身份块的记忆（如「我的毕设方向是什么」），看注入是否仍在；再查 `turn_trace` 是否继续写新回合 |
+| 子代理隔离 | 让主会话派一个 subagent 去问「你看到我的长期记忆了吗」，断言子代理上下文里没有【长期记忆·用户】；同时确认主会话注入未受影响 |
+
 7. **子代理不注入**（`origin:'subagent'` 直接跳过），是有意为之，但没做过对照实验。
 8. `.tmp/` 里有早期探针脚本（schema/fts/merge 实验），可删，删前看一眼有没有想留的数据。
 9. 仓库没 git。**建议接手第一件事就 `git init` 并提交当前状态**，否则改坏了没法回退。
@@ -216,6 +268,8 @@ cd ..; node eval/run.js
 7. **PowerShell 5.1 会按 ANSI 读改写文件**，直接用 shell 改含中文的源码会毁掉编码——只用文件工具改源码。发中文 JSON 要 `UTF8.GetBytes` + `charset=utf-8`。
 8. **测试输出坑**：`node test/x.js | Select-Object -Last 5` 会把 `$LASTEXITCODE` 变成 1，必须重定向到文件再读退出码。
 9. **spawn 受限**：沙箱里起子进程（尤其 MCP stdio 测试）需要 `danger-full-access` 批准，否则 `EPERM`。
+10. **演示库的 WAL**：`server/demo.db` 本体可能只有 4KB，数据全在 `demo.db-wal`（593KB 量级）里——**只拷 `.db` 单文件会丢数据**。要带走就在停服后拷 `db` + `-wal` + `-shm` 三个文件，或先 `PRAGMA wal_checkpoint(TRUNCATE)`。`POST /api/reset` 是**删库重建**（`engine.close()` → 删 `demo.db`/`-wal`/`-shm` → reopen + `seed()`），不是清表。`.gitignore` 已忽略 `*.db*`，这是对的，别把演示数据提交进仓库。
+11. **改完 host 侧代码要重载再验证**，且重载会重置内存态（`injectionStats`、`captureStats`、`turnTrace`），面板上的「上次注入/上次检查」会短暂归零，不是 bug。
 
 ---
 
